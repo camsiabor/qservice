@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"github.com/camsiabor/qservice/qservice"
 	"math/rand"
 	"sync"
 )
@@ -12,16 +11,16 @@ type Overseer struct {
 
 	mutex sync.RWMutex
 
-	gateway  qservice.Gateway
-	services map[string]*qservice.Service
+	gateway  Gateway
+	services map[string]*Service
 
-	queue   chan *qservice.Message
+	queue   chan *Message
 	control chan string
 }
 
-func (o *Overseer) Init(gateway qservice.Gateway) {
+func (o *Overseer) Init(gateway Gateway) {
 	o.gateway = gateway
-	o.services = make(map[string]*qservice.Service)
+	o.services = make(map[string]*Service)
 }
 
 func (o *Overseer) Start() error {
@@ -49,7 +48,7 @@ func (o *Overseer) Stop() error {
 
 func (o *Overseer) Loop() {
 	var ok bool
-	var msg *qservice.Message
+	var msg *Message
 
 	for {
 		select {
@@ -65,12 +64,12 @@ func (o *Overseer) Loop() {
 	}
 }
 
-func (o *Overseer) ServiceRegister(address string, options qservice.ServiceOptions, handler qservice.ServiceHandler) error {
+func (o *Overseer) ServiceRegister(address string, options ServiceOptions, handler ServiceHandler) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	var service = &qservice.Service{}
+	var service = &Service{}
 
 	var current = o.services[address]
 	if current == nil {
@@ -93,8 +92,8 @@ func (o *Overseer) ServiceUnregister(address string) error {
 	return o.gateway.ServiceUnregister(address)
 }
 
-func (o *Overseer) Post(address string, data interface{}, headers qservice.MessageHeaders, options qservice.MessageOptions) error {
-	var message = &qservice.Message{}
+func (o *Overseer) Post(address string, data interface{}, headers MessageHeaders, options MessageOptions) error {
+	var message = &Message{}
 	message.Id = rand.Int63()
 	message.Address = address
 	message.Data = data
@@ -103,8 +102,8 @@ func (o *Overseer) Post(address string, data interface{}, headers qservice.Messa
 	return o.gateway.Post(message)
 }
 
-func (o *Overseer) Broadcast(address string, data interface{}, headers qservice.MessageHeaders, options qservice.MessageOptions) error {
-	var message = &qservice.Message{}
+func (o *Overseer) Broadcast(address string, data interface{}, headers MessageHeaders, options MessageOptions) error {
+	var message = &Message{}
 	message.Id = rand.Int63()
 	message.Address = address
 	message.Data = data

@@ -1,8 +1,6 @@
 package core
 
-import "github.com/camsiabor/qservice/qservice"
-
-type ServiceHandler func(message *qservice.Message)
+type ServiceHandler func(message *Message)
 
 type ServiceOptions map[string]interface{}
 
