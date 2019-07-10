@@ -21,20 +21,23 @@ type Message struct {
 	Data    interface{}
 	Timeout int64
 
+	Err    error
+	Sender string
+
 	Headers MessageHeaders
 	Options MessageOptions
 
-	Sender string
-
-	ReplyId      uint32
+	ReplyId      uint64
 	ReplyErr     string
 	ReplyCode    int
 	ReplyData    interface{}
-	replyChannel chan interface{}
+	ReplyChannel chan interface{}
 
 	Handler MessageHandler
 
 	overseer *Overseer
+
+	Related *Message
 }
 
 func NewMessage(address string, data interface{}, timeout int64, headers MessageHeaders, options MessageOptions) (message *Message) {
@@ -49,9 +52,11 @@ func NewMessage(address string, data interface{}, timeout int64, headers Message
 	return message
 }
 
-func (o *Message) Reply(data interface{}) error {
+func (o *Message) Reply(code int, data interface{}) error {
 	o.Type = REPLY
+	o.ReplyCode = code
 	o.ReplyData = data
+	o.Address = o.Sender
 	_, err := o.overseer.Post(o)
 	return err
 }
@@ -70,4 +75,9 @@ func (o *Message) Error(code int, errmsg string) error {
 
 func (o *Message) Overseer() *Overseer {
 	return o.overseer
+}
+
+func (o *Message) SetHandler(handler MessageHandler) *Message {
+	o.Handler = handler
+	return o
 }
