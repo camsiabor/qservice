@@ -8,12 +8,12 @@ func Iterate(conn *zk.Conn, root string, parent string, depth int, iterator ZkIt
 	if depth < 0 {
 		return nil
 	}
-	if parent[len(parent)-1] != '/' {
-		parent = parent + "/"
-	}
 	var children, _, err = conn.Children(parent)
 	if err != nil {
 		return err
+	}
+	if parent[len(parent)-1] != '/' {
+		parent = parent + "/"
 	}
 	var n = len(children)
 	for i := 0; i < n; i++ {
