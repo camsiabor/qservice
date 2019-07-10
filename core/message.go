@@ -21,7 +21,7 @@ type Message struct {
 
 	Address string
 	Data    interface{}
-	Timeout int64
+	Timeout time.Duration
 
 	Err    error
 	Sender string
@@ -42,15 +42,12 @@ type Message struct {
 	Related *Message
 }
 
-func NewMessage(address string, data interface{}, timeout int64, headers MessageHeaders, options MessageOptions) (message *Message) {
+func NewMessage(address string, data interface{}, timeout time.Duration) (message *Message) {
 
 	message = &Message{}
 	message.Address = address
 	message.Data = data
 	message.Timeout = timeout
-	message.Headers = headers
-	message.Options = options
-
 	return message
 }
 
@@ -79,8 +76,23 @@ func (o *Message) Overseer() *Overseer {
 	return o.overseer
 }
 
+func (o *Message) SetTimeout(timeout time.Duration) *Message {
+	o.Timeout = timeout
+	return o
+}
+
 func (o *Message) SetHandler(handler MessageHandler) *Message {
 	o.Handler = handler
+	return o
+}
+
+func (o *Message) SetHeaders(headers MessageHeaders) *Message {
+	o.Headers = headers
+	return o
+}
+
+func (o *Message) SetOptions(options MessageOptions) *Message {
+	o.Options = options
 	return o
 }
 
