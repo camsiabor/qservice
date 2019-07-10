@@ -2,31 +2,50 @@ package core
 
 import (
 	"fmt"
-	"math/rand"
+	"github.com/twinj/uuid"
 	"sync"
+	"sync/atomic"
 )
 
 type Overseer struct {
-	serial int64
+	id string
+
+	serial uint32
 
 	mutex sync.RWMutex
 
-	gateway  Gateway
-	services map[string]*Service
+	gateway Gateway
 
 	queue   chan *Message
 	control chan string
+
+	waitings     []*Message
+	waitingLimit uint32
+
+	services map[string]*Service
 }
 
-func (o *Overseer) Init(gateway Gateway) {
+func (o *Overseer) Init(gateway Gateway, waitingLimit uint32) {
+
+	if waitingLimit <= 65536 {
+		waitingLimit = 65536
+	}
+
 	o.gateway = gateway
+	o.waitings = make([]*Message, waitingLimit)
 	o.services = make(map[string]*Service)
 }
 
 func (o *Overseer) Start() error {
+
 	if o.gateway == nil {
 		return fmt.Errorf("gateway is null")
 	}
+
+	if len(o.id) == 0 {
+		o.id = uuid.NewV4().String()
+	}
+
 	var err error
 	o.queue, err = o.gateway.Poll(8192)
 	if err != nil {
@@ -56,6 +75,10 @@ func (o *Overseer) Loop() {
 			if !ok {
 				break
 			}
+			var service = o.services[msg.Address]
+			if service != nil {
+				service.handle(msg)
+			}
 		case _, ok = <-o.control:
 			if !ok {
 				break
@@ -70,12 +93,16 @@ func (o *Overseer) ServiceRegister(address string, options ServiceOptions, handl
 	defer o.mutex.Unlock()
 
 	var service = &Service{}
+	service.address = address
+	service.handler = handler
 
 	var current = o.services[address]
 	if current == nil {
 		o.services[address] = service
 	} else {
-		current.tail().next = service
+		var tail = current.tail()
+		tail.next = service
+		service.prev = tail
 	}
 
 	return o.gateway.ServiceRegister(address, options)
@@ -92,22 +119,45 @@ func (o *Overseer) ServiceUnregister(address string) error {
 	return o.gateway.ServiceUnregister(address)
 }
 
-func (o *Overseer) Post(address string, data interface{}, headers MessageHeaders, options MessageOptions) error {
-	var message = &Message{}
-	message.Id = rand.Int63()
-	message.Address = address
-	message.Data = data
-	message.Headers = headers
-	message.Options = options
-	return o.gateway.Post(message)
+func (o *Overseer) generateMessageId() uint32 {
+	var id = atomic.AddUint32(&o.serial, 1)
+	if id >= o.waitingLimit {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+		if atomic.LoadUint32(&o.serial) >= o.waitingLimit {
+			atomic.StoreUint32(&o.serial, 0)
+		}
+		id = atomic.AddUint32(&o.serial, 1)
+	}
+	return id
 }
 
-func (o *Overseer) Broadcast(address string, data interface{}, headers MessageHeaders, options MessageOptions) error {
-	var message = &Message{}
-	message.Id = rand.Int63()
-	message.Address = address
-	message.Data = data
-	message.Headers = headers
-	message.Options = options
+func (o *Overseer) Post(message *Message) (interface{}, error) {
+	message.Type = SEND
+	message.Sender = o.id
+	if message.Timeout > 0 {
+		message.ReplyId = o.generateMessageId()
+		message.replyChannel = make(chan interface{})
+		defer func() {
+			close(message.replyChannel)
+			o.waitings[message.ReplyId] = nil
+		}()
+	}
+	var err = o.gateway.Post(message)
+	if err != nil {
+		return nil, err
+	}
+	var ret interface{}
+	if message.replyChannel != nil {
+		ret = <-message.replyChannel
+	}
+	return ret, nil
+}
+
+func (o *Overseer) Broadcast(message *Message) error {
+	// TODO implement
+
+	message.Type = BROADCAST
 	return o.gateway.Post(message)
+
 }
