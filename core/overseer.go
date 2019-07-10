@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"sync"
 	"sync/atomic"
@@ -119,11 +118,23 @@ func (o *Overseer) handleReply(response *Message) {
 	}
 	o.requests[response.ReplyId] = nil
 
-	if request.Handler == nil {
+	request.Related = response
+	response.Related = request
+
+	if request.Handler != nil {
+		go func() {
+			request.Handler(response)
+			if request.ReplyChannel != nil {
+				request.ReplyChannel <- response
+			}
+		}()
 		return
 	}
-	response.Related = request
-	request.Handler(response)
+
+	if request.ReplyChannel != nil {
+		request.ReplyChannel <- response
+	}
+
 }
 
 func (o *Overseer) ServiceRegister(address string, options ServiceOptions, handler ServiceHandler) error {
@@ -171,50 +182,42 @@ func (o *Overseer) generateMessageId() uint64 {
 	return id
 }
 
-func (o *Overseer) Post(message *Message) (interface{}, error) {
+func (o *Overseer) Post(request *Message) (*Message, error) {
 
-	message.Type = SEND
-	message.Sender = o.id
+	request.Type = SEND
+	request.Sender = o.id
 
-	if message.Timeout > 0 || message.Handler != nil {
+	if request.Timeout > 0 || request.Handler != nil {
 
-		message.ReplyId = o.generateMessageId()
-		o.requests[message.ReplyId] = message
+		request.ReplyId = o.generateMessageId()
+		o.requests[request.ReplyId] = request
 
-		if message.Timeout > 0 {
+		if request.Timeout > 0 {
 			defer func() {
-				o.requests[message.ReplyId] = nil
+				o.requests[request.ReplyId] = nil
 			}()
-			if message.ReplyChannel == nil {
-				message.ReplyChannel = make(chan interface{})
+			if request.ReplyChannel == nil {
+				request.ReplyChannel = make(chan *Message)
 				defer func() {
-					close(message.ReplyChannel)
+					close(request.ReplyChannel)
 				}()
 			}
 		}
 	}
 
-	var err = o.gateway.Post(message)
+	var err = o.gateway.Post(request)
 	if err != nil {
 		return nil, err
 	}
 
 	// synchronous operations
-	if message.ReplyChannel != nil {
-		var ret, isClosed, isTimeout = util.Timeout(message.ReplyChannel, time.Duration(message.Timeout)*time.Millisecond)
-		if isClosed {
-			return nil, fmt.Errorf("reply channel is closed")
-		}
-		if isTimeout {
-			return nil, fmt.Errorf("reply channel is closed")
-		}
-		message.ReplyData = ret
-		if message.Handler != nil {
-			message.Handler(message)
+	if request.ReplyChannel != nil {
+		var response, timeouted = request.WaitReply(time.Duration(request.Timeout) * time.Millisecond)
+		if timeouted {
+			return response, fmt.Errorf("wait for %v reply timeout %d", request.Address, request.Timeout)
 		}
 	}
-
-	return message.ReplyData, nil
+	return request.Related, nil
 }
 
 func (o *Overseer) Broadcast(message *Message) error {

@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 type MessageOptions map[string]interface{}
 type MessageHeaders map[string]interface{}
 
@@ -31,7 +33,7 @@ type Message struct {
 	ReplyErr     string
 	ReplyCode    int
 	ReplyData    interface{}
-	ReplyChannel chan interface{}
+	ReplyChannel chan *Message
 
 	Handler MessageHandler
 
@@ -80,4 +82,29 @@ func (o *Message) Overseer() *Overseer {
 func (o *Message) SetHandler(handler MessageHandler) *Message {
 	o.Handler = handler
 	return o
+}
+
+func (o *Message) WaitReply(timeout time.Duration) (*Message, bool) {
+
+	if timeout <= 0 {
+		return nil, false
+	}
+
+	if o.ReplyChannel == nil {
+		o.ReplyChannel = make(chan *Message)
+		defer func() {
+			close(o.ReplyChannel)
+			o.ReplyChannel = nil
+		}()
+	}
+
+	var timer = time.After(timeout)
+
+	var response *Message
+	select {
+	case response = <-o.ReplyChannel:
+		return response, false
+	case <-timer:
+		return nil, true
+	}
 }
