@@ -6,7 +6,6 @@ import (
 	"github.com/twinj/uuid"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 type OverseerErrorHandler func(event string, err interface{}, overseer *Overseer)
@@ -219,9 +218,9 @@ func (o *Overseer) Post(request *Message) (*Message, error) {
 
 	// synchronous operations
 	if request.ReplyChannel != nil {
-		var response, timeouted = request.WaitReply(time.Duration(request.Timeout) * time.Millisecond)
+		var response, timeouted = request.WaitReply(request.Timeout)
 		if timeouted {
-			return response, fmt.Errorf("wait for %v reply timeout %d", request.Address, request.Timeout)
+			return response, fmt.Errorf("wait for %v reply timeout %d", request.Address, request.Timeout/1000/1000)
 		}
 	}
 	return request.Related, nil
