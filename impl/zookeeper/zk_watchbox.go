@@ -38,9 +38,8 @@ func (o *WatchBox) loop() {
 	var stat *zk.Stat
 	var ch <-chan zk.Event
 	for {
-		if !o.watcher.IsConnected() {
-			o.watcher.connectCond.Wait()
-		}
+		o.watcher.WaitForConnected()
+
 		switch o.wtype {
 		case WatchTypeGet:
 			data, stat, ch, err = o.watcher.conn.GetW(o.path)
@@ -56,7 +55,7 @@ func (o *WatchBox) loop() {
 		}
 		var event, ok = <-ch
 		if !ok {
-			err = fmt.Errorf("disconnected")
+			err = fmt.Errorf("closed")
 		}
 		if !o.routine(&event, stat, data, o, o.watcher, err) {
 			break

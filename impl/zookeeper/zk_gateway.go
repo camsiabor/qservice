@@ -21,25 +21,23 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	if o.watcher == nil {
 		o.watcher = &ZooWatcher{}
 	}
-	if !o.watcher.IsConnected() {
-		err = o.watcher.Start(config)
-	}
+
+	err = o.watcher.Start(config)
+
 	if err != nil {
 		return err
 	}
 
-	var exist bool
-	var conn = o.watcher.GetConn()
-	exist, _, err = conn.Exists(PathService)
-	if err != nil {
-		return err
-	}
-	if !exist {
-		_, err = conn.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		if err != nil {
-			return err
+	o.watcher.AddConnectCallback(func(event *zk.Event, watcher *ZooWatcher, err error) {
+		if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly {
+			var conn = o.watcher.GetConn()
+			var exist, _, _ = conn.Exists(PathService)
+			if !exist {
+				_, _ = conn.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
+			}
 		}
-	}
+	})
+
 	return nil
 }
 

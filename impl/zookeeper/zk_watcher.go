@@ -9,28 +9,34 @@ import (
 	"time"
 )
 
+type ZooConnectCallback func(event *zk.Event, watcher *ZooWatcher, err error)
+
 type ZooWatcher struct {
 	Id                string
 	Endpoints         []string
 	SessionTimeout    time.Duration
 	ReconnectInterval time.Duration
+	connectCallbacks  []ZooConnectCallback
 
 	conn         *zk.Conn
 	eventChannel <-chan zk.Event
 
 	mutex sync.RWMutex
-	timer *qroutine.Timer
 
 	watchMutex    sync.RWMutex
 	watchGet      map[string]*WatchBox
 	watchExist    map[string]*WatchBox
 	watchChildren map[string]*WatchBox
 
-	connected   bool
-	connectCond sync.Cond
+	connected      bool
+	connectCond    sync.Cond
+	reconnectTimer *qroutine.Timer
 }
 
 func (o *ZooWatcher) Start(config map[string]interface{}) error {
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
 	if o.watchGet == nil {
 		o.watchGet = map[string]*WatchBox{}
@@ -58,17 +64,32 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 		var interval = util.GetInt64("reconnect.interval", 10)
 		o.ReconnectInterval = time.Duration(interval) * time.Second
 	}
+	if o.conn != nil {
+		return fmt.Errorf("already connected")
+	}
+	o.reconnectTimer = &qroutine.Timer{}
+	return o.reconnectTimer.Start(0, o.ReconnectInterval, o.reconnect)
 
-	return o.Conn()
+}
+
+func (o *ZooWatcher) reconnect(timer *qroutine.Timer, err error) {
+	o.conn, o.eventChannel, err = zk.Connect(o.Endpoints, o.SessionTimeout)
+	o.connectEventLoops(false)
+	if o.connected {
+		go o.connectEventLoops(true)
+		timer.Stop()
+	}
 }
 
 func (o *ZooWatcher) Stop(map[string]interface{}) error {
-	if !o.IsConnected() {
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	if o.conn == nil {
 		return fmt.Errorf("not connected yet")
 	}
-	if o.timer != nil {
-		o.timer.Stop()
-	}
+
 	if o.conn != nil {
 		o.conn.Close()
 		o.connected = false
@@ -76,41 +97,57 @@ func (o *ZooWatcher) Stop(map[string]interface{}) error {
 	return nil
 }
 
-func (o *ZooWatcher) Conn() error {
+func (o *ZooWatcher) AddConnectCallback(callback ZooConnectCallback) {
+	if callback == nil {
+		panic("null connect callback")
+	}
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	if o.IsConnected() {
-		return fmt.Errorf("already connected")
+	if o.connectCallbacks == nil {
+		o.connectCallbacks = []ZooConnectCallback{callback}
+	} else {
+		o.connectCallbacks = append(o.connectCallbacks, callback)
 	}
-	var err error
-	o.conn, o.eventChannel, err = zk.Connect(o.Endpoints, o.SessionTimeout)
-	if err != nil {
-		return err
-	}
-	o.connected = true
-	o.connectCond.Broadcast()
-
-	o.Watch(WatchTypeExist, "/", o.onDisconnect)
-
-	return nil
 }
 
-func (o *ZooWatcher) onDisconnect(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
-	if err == nil {
-		return true
-	}
+func (o *ZooWatcher) connectEventLoops(loop bool) {
 
-	watcher.connected = false
-	o.timer = &qroutine.Timer{}
-	_ = o.timer.Start(0, o.ReconnectInterval, func(timer *qroutine.Timer, err error) {
-		_ = o.Conn()
-		if o.IsConnected() {
-			timer.Stop()
+	for event := range o.eventChannel {
+		var connectevt = false
+		switch event.State {
+		case zk.StateConnected, zk.StateConnectedReadOnly:
+			o.connected = true
+			o.connectCond.Broadcast()
+			connectevt = true
+		case zk.StateDisconnected:
+			o.connected = false
+			connectevt = true
 		}
-	})
 
-	return true
+		if o.connectCallbacks == nil {
+			continue
+		}
+
+		for _, callback := range o.connectCallbacks {
+			func() {
+				defer func() {
+					var pan = recover()
+					if pan == nil {
+						return
+					}
+					var err = util.AsError(pan)
+					callback(&event, o, err)
+				}()
+				callback(&event, o, nil)
+			}()
+		}
+
+		if connectevt && !loop {
+			return
+		}
+
+	}
 }
 
 func (o *ZooWatcher) getWatch(wtype WatchType, path string, lock bool) *WatchBox {
@@ -169,4 +206,11 @@ func (o *ZooWatcher) GetConn() *zk.Conn {
 
 func (o *ZooWatcher) IsConnected() bool {
 	return o.connected
+}
+
+func (o *ZooWatcher) WaitForConnected() {
+	if o.IsConnected() {
+		return
+	}
+	o.connectCond.Wait()
 }
