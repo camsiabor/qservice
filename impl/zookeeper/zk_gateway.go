@@ -2,52 +2,40 @@ package zookeeper
 
 import (
 	"fmt"
-	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/core"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/samuel/go-zookeeper/zk"
-	"time"
 )
 
 type ZGateway struct {
 	memory.MGateway
 
-	Endpoints      []string
-	SessionTimeout time.Duration
-
-	conn         *zk.Conn
-	eventChannel <-chan zk.Event
+	watcher *ZooWatcher
 }
 
 const PathService = "/service"
 
 func (o *ZGateway) Init(config map[string]interface{}) error {
 
-	if o.Endpoints == nil {
-		o.Endpoints = util.GetStringSlice(config, "endpoints")
-		if o.Endpoints == nil {
-			o.Endpoints = []string{"127.0.0.1:2181"}
-		}
-	}
-
-	if o.SessionTimeout <= 0 {
-		var timeout = util.GetInt64("session.timeout", 10)
-		o.SessionTimeout = time.Duration(timeout) * time.Second
-	}
-
 	var err error
-	o.conn, o.eventChannel, err = zk.Connect(o.Endpoints, o.SessionTimeout)
+	if o.watcher == nil {
+		o.watcher = &ZooWatcher{}
+	}
+	if !o.watcher.IsConnected() {
+		err = o.watcher.Start(config)
+	}
 	if err != nil {
 		return err
 	}
 
 	var exist bool
-	exist, _, err = o.conn.Exists(PathService)
+	var conn = o.watcher.GetConn()
+	exist, _, err = conn.Exists(PathService)
 	if err != nil {
 		return err
 	}
 	if !exist {
-		_, err = o.conn.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, err = conn.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		if err != nil {
 			return err
 		}
@@ -70,8 +58,11 @@ func (o *ZGateway) Start(config map[string]interface{}) error {
 }
 
 func (o *ZGateway) Stop(config map[string]interface{}) error {
-	if o.conn != nil {
-		o.conn.Close()
+	if o.watcher != nil {
+		var err = o.watcher.Stop(config)
+		if err != nil {
+			return err
+		}
 	}
 	return o.MGateway.Stop(config)
 }
@@ -137,7 +128,7 @@ func (o *ZGateway) Broadcast(message *core.Message) error {
 }
 
 func (o ZGateway) ServiceRegister(address string, options core.ServiceOptions) error {
-
+	// TODO
 	/*
 		var path, err = o.conn.Create("/service/" + address + "/", []byte(""), zk.FlagEphemeral | zk.FlagSequence, zk.WorldACL(zk.PermAll))
 		if err != nil {
@@ -150,5 +141,7 @@ func (o ZGateway) ServiceRegister(address string, options core.ServiceOptions) e
 }
 
 func (o ZGateway) ServiceUnregister(address string) error {
-	return o.conn.Delete("/service/"+address+"/", 0)
+	// TODO
+	//return o.conn.Delete("/service/"+address+"/", 0)
+	return nil
 }
