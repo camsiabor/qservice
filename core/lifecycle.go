@@ -1,6 +1,6 @@
 package core
 
 type LifeCycler interface {
-	Start(...interface{}) error
-	Stop(...interface{}) error
+	Start(map[string]interface{}) error
+	Stop(map[string]interface{}) error
 }

@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"sync"
 	"sync/atomic"
@@ -11,6 +12,8 @@ import (
 type OverseerErrorHandler func(event string, err interface{}, overseer *Overseer)
 
 type Overseer struct {
+	LifeCycler
+
 	id string
 
 	serial uint64
@@ -32,16 +35,20 @@ type Overseer struct {
 
 func (o *Overseer) Init(gateway Gateway, waitingLimit uint32) {
 
-	if waitingLimit <= 65536 {
-		waitingLimit = 65536
-	}
-
-	o.gateway = gateway
-	o.requests = make([]*Message, waitingLimit)
-	o.services = make(map[string]*Service)
 }
 
-func (o *Overseer) Start() error {
+func (o *Overseer) Start(config map[string]interface{}) error {
+
+	var requestsLimit = util.GetUInt64(config, 65536, "requests.limit")
+	o.requests = make([]*Message, requestsLimit)
+
+	if o.services == nil {
+		o.services = make(map[string]*Service)
+	}
+
+	if o.gateway == nil {
+		o.gateway = util.Get(config, nil, "gateway").(Gateway)
+	}
 
 	if o.gateway == nil {
 		return fmt.Errorf("gateway is null")

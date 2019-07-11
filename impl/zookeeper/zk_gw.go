@@ -2,6 +2,7 @@ package zookeeper
 
 import (
 	"fmt"
+	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/core"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/samuel/go-zookeeper/zk"
@@ -18,28 +19,20 @@ type ZGateway struct {
 	eventChannel <-chan zk.Event
 }
 
-func (o *ZGateway) Start(args ...interface{}) error {
+const PathService = "/service"
 
-	var err error
-	defer func() {
-		if err != nil {
-			_ = o.Stop()
-		}
-	}()
+func (o *ZGateway) Init(config map[string]interface{}) error {
 
-	err = o.ZkInit()
-	if err == nil {
-		err = o.MGateway.Start(args)
-	}
-	return err
-}
-
-func (o *ZGateway) ZkInit() error {
 	if o.Endpoints == nil {
-		o.Endpoints = []string{"127.0.0.1:2181"}
+		o.Endpoints = util.GetStringSlice(config, "endpoints")
+		if o.Endpoints == nil {
+			o.Endpoints = []string{"127.0.0.1:2181"}
+		}
 	}
+
 	if o.SessionTimeout <= 0 {
-		o.SessionTimeout = time.Duration(10) * time.Second
+		var timeout = util.GetInt64("session.timeout", 10)
+		o.SessionTimeout = time.Duration(timeout) * time.Second
 	}
 
 	var err error
@@ -49,25 +42,38 @@ func (o *ZGateway) ZkInit() error {
 	}
 
 	var exist bool
-	exist, _, err = o.conn.Exists("/service")
+	exist, _, err = o.conn.Exists(PathService)
 	if err != nil {
 		return err
 	}
 	if !exist {
-		_, err = o.conn.Create("/service", []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, err = o.conn.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (o *ZGateway) Stop(args ...interface{}) error {
+func (o *ZGateway) Start(config map[string]interface{}) error {
+	var err error
+	defer func() {
+		if err != nil {
+			_ = o.Stop(config)
+		}
+	}()
+	err = o.Init(config)
+	if err == nil {
+		err = o.MGateway.Start(config)
+	}
+	return err
+}
+
+func (o *ZGateway) Stop(config map[string]interface{}) error {
 	if o.conn != nil {
 		o.conn.Close()
 	}
-	return o.MGateway.Stop(args...)
+	return o.MGateway.Stop(config)
 }
 
 func (o *ZGateway) Loop() {
