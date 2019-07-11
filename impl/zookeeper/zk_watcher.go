@@ -29,7 +29,7 @@ type ZooWatcher struct {
 	watchChildren map[string]*WatchBox
 
 	connected      bool
-	connectCond    sync.Cond
+	connectCond    *sync.Cond
 	reconnectTimer *qroutine.Timer
 }
 
@@ -37,6 +37,11 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
+
+	if o.connectCond == nil {
+		o.connectCond = &sync.Cond{}
+		o.connectCond.L = o.mutex
+	}
 
 	if o.watchGet == nil {
 		o.watchGet = map[string]*WatchBox{}
