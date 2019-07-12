@@ -171,13 +171,12 @@ func (o *ZooWatcher) getWatch(wtype WatchType, path string, lock bool) *WatchBox
 	return nil
 }
 
-func (o *ZooWatcher) Watch(wtype WatchType, path string, routine WatchRoutine) {
+func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routine WatchRoutine) {
 	var box = o.getWatch(wtype, path, true)
 	if box != nil {
 		box.routine = routine
 		return
 	}
-
 	o.watchMutex.Lock()
 	defer o.watchMutex.Unlock()
 
@@ -192,6 +191,7 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, routine WatchRoutine) {
 	box.routine = routine
 	box.control = make(chan bool, 2)
 	box.watcher = o
+	box.Data = data
 
 	switch wtype {
 	case WatchTypeGet:
@@ -203,6 +203,18 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, routine WatchRoutine) {
 	}
 
 	go box.loop()
+}
+
+func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []zk.ACL) error {
+	exists, _, err := o.conn.Exists(path)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = o.conn.Create(path, data, createflags, acl)
+	return err
 }
 
 func (o *ZooWatcher) GetConn() *zk.Conn {

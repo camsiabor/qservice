@@ -1,4 +1,4 @@
-package core
+package qtiny
 
 type Gateway interface {
 	LifeCycler

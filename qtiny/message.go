@@ -1,6 +1,10 @@
-package core
+package qtiny
 
-import "time"
+import (
+	"encoding/json"
+	"github.com/camsiabor/qcom/util"
+	"time"
+)
 
 type MessageOptions map[string]interface{}
 type MessageHeaders map[string]interface{}
@@ -119,4 +123,49 @@ func (o *Message) WaitReply(timeout time.Duration) (*Message, bool) {
 	case <-timer:
 		return nil, true
 	}
+}
+
+func (o *Message) ToJson() ([]byte, error) {
+	var m = o.ToMap()
+	return json.Marshal(m)
+}
+
+func (o *Message) FromJson(data []byte) error {
+	var m map[string]interface{}
+	var err = json.Unmarshal(data, &m)
+	if err != nil {
+		return err
+	}
+	o.FromMap(m)
+	return nil
+}
+
+func (o *Message) ToMap() map[string]interface{} {
+	var m = make(map[string]interface{})
+	m["Type"] = o.Type
+	m["Address"] = o.Address
+	m["Sender"] = o.Sender
+	m["Data"] = o.Data
+	m["Timeout"] = o.Timeout
+	m["ReplyId"] = o.ReplyId
+	m["ReplyCode"] = o.ReplyCode
+	m["ReplyData"] = o.ReplyData
+	m["ReplyErr"] = o.ReplyErr
+	m["Headers"] = o.Headers
+	m["Options"] = o.Options
+	return m
+}
+
+func (o *Message) FromMap(m map[string]interface{}) {
+	o.Type = MessageType(util.AsInt(m["Type"], 0))
+	o.Address = util.AsStr(m["Address"], "")
+	o.Sender = util.AsStr(m["Sender"], "")
+	o.Data = m["Data"]
+	o.Timeout = time.Duration(util.AsInt64(m["Timeout"], 0))
+	o.ReplyId = util.AsUInt64(m["ReplyId"], 0)
+	o.ReplyCode = util.AsInt(m["ReplyCode"], 0)
+	o.ReplyData = m["ReplyData"]
+	o.ReplyErr = util.AsStr(m["ReplyErr"], "")
+	o.Headers = util.AsMap(m["Headers"], false)
+	o.Options = util.AsMap(m["Options"], false)
 }

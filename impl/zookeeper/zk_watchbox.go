@@ -23,6 +23,7 @@ type WatchBox struct {
 	control chan bool
 	routine WatchRoutine
 	watcher *ZooWatcher
+	Data    interface{}
 }
 
 func (o *WatchBox) GetType() WatchType {
@@ -34,10 +35,20 @@ func (o *WatchBox) GetPath() string {
 }
 
 func (o *WatchBox) loop() {
+
+	var ok bool
 	var err error
 	var data interface{}
+
 	var stat *zk.Stat
+	var event zk.Event
 	var ch <-chan zk.Event
+
+	event.Path = o.path
+	event.Type = zk.EventSession
+	event.State = zk.StateHasSession
+	event.Err = nil
+
 	for {
 
 		var connectChannel = o.watcher.WaitForConnected()
@@ -59,18 +70,17 @@ func (o *WatchBox) loop() {
 		case WatchTypeChildren:
 			data, stat, ch, err = o.watcher.conn.ChildrenW(o.path)
 		}
-		if err != nil {
-			if !o.routine(nil, stat, data, o, o.watcher, err) {
-				break
-			}
-		}
-		var event, ok = <-ch
-		if !ok {
-			err = fmt.Errorf("closed")
-		}
 		if !o.routine(&event, stat, data, o, o.watcher, err) {
 			break
 		}
+		event, ok = <-ch
+		if !ok {
+			err = fmt.Errorf("closed")
+		}
+		if event.Type == zk.EventNotWatching {
+			break
+		}
+
 	}
 }
 

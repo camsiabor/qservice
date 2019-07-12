@@ -1,4 +1,4 @@
-package core
+package qtiny
 
 type LifeCycler interface {
 	Start(map[string]interface{}) error

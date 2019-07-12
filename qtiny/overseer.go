@@ -1,4 +1,4 @@
-package core
+package qtiny
 
 import (
 	"fmt"
@@ -110,7 +110,7 @@ func (o *Overseer) dispatch(msg *Message) {
 	var service = o.services[msg.Address]
 	if service != nil {
 		msg.overseer = o
-		service.handle(msg)
+		service.Handle(msg)
 	}
 }
 
@@ -149,16 +149,16 @@ func (o *Overseer) ServiceRegister(address string, options ServiceOptions, handl
 	defer o.mutex.Unlock()
 
 	var service = &Service{}
-	service.address = address
-	service.handler = handler
+	service.Address = address
+	service.Handler = handler
 
 	var current = o.services[address]
 	if current == nil {
 		o.services[address] = service
 	} else {
-		var tail = current.tail()
-		tail.next = service
-		service.prev = tail
+		var tail = current.Tail()
+		tail.Next = service
+		service.Prev = tail
 	}
 
 	return o.gateway.ServiceRegister(address, options)

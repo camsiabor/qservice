@@ -30,3 +30,16 @@ func ZooWatcherGet(id string, endpoint string) (instance *ZooWatcher, err error)
 	}
 	return instance, err
 }
+
+func ZooWatcherClose(id string) {
+
+	zkwMutex.Lock()
+	defer zkwMutex.Unlock()
+	var instance = zkwInstances[id]
+	if instance == nil {
+		return
+	}
+	_ = instance.Stop(nil)
+	delete(zkwInstances, id)
+
+}
