@@ -2,8 +2,9 @@ package zookeeper
 
 import (
 	"fmt"
+	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/util"
-	"github.com/samuel/go-zookeeper/zk"
+	"time"
 )
 
 type WatchType int
@@ -38,7 +39,17 @@ func (o *WatchBox) loop() {
 	var stat *zk.Stat
 	var ch <-chan zk.Event
 	for {
-		o.watcher.WaitForConnected()
+
+		var connectChannel = o.watcher.WaitForConnected()
+		if connectChannel != nil {
+			var chosen, connected, recvok = util.Timeout(connectChannel, time.Duration(10)*time.Minute)
+			if chosen < 0 {
+				continue
+			}
+			if !connected.Bool() || !recvok {
+				break
+			}
+		}
 
 		switch o.wtype {
 		case WatchTypeGet:

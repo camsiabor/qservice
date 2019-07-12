@@ -2,9 +2,9 @@ package zookeeper
 
 import (
 	"fmt"
+	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
-	"github.com/samuel/go-zookeeper/zk"
 	"sync"
 	"time"
 )
@@ -28,8 +28,10 @@ type ZooWatcher struct {
 	watchExist    map[string]*WatchBox
 	watchChildren map[string]*WatchBox
 
-	connected      bool
-	connectCond    *sync.Cond
+	connected           bool
+	connectChannel      []chan bool
+	connectChannelMutex sync.Mutex
+
 	reconnectTimer *qroutine.Timer
 }
 
@@ -37,11 +39,6 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
-
-	if o.connectCond == nil {
-		o.connectCond = &sync.Cond{}
-		o.connectCond.L = o.mutex
-	}
 
 	if o.watchGet == nil {
 		o.watchGet = map[string]*WatchBox{}
@@ -99,6 +96,9 @@ func (o *ZooWatcher) Stop(map[string]interface{}) error {
 		o.conn.Close()
 		o.connected = false
 	}
+
+	o.notifyConnected(false)
+
 	return nil
 }
 
@@ -123,8 +123,8 @@ func (o *ZooWatcher) connectEventLoops(loop bool) {
 		switch event.State {
 		case zk.StateConnected, zk.StateConnectedReadOnly:
 			o.connected = true
-			o.connectCond.Broadcast()
 			connectevt = true
+			o.notifyConnected(true)
 		case zk.StateDisconnected:
 			o.connected = false
 			connectevt = true
@@ -213,9 +213,33 @@ func (o *ZooWatcher) IsConnected() bool {
 	return o.connected
 }
 
-func (o *ZooWatcher) WaitForConnected() {
-	if o.IsConnected() {
+func (o *ZooWatcher) notifyConnected(value bool) {
+	if o.connectChannel == nil {
 		return
 	}
-	o.connectCond.Wait()
+	o.connectChannelMutex.Lock()
+	defer o.connectChannelMutex.Unlock()
+	if o.connectChannel == nil {
+		return
+	}
+	for _, ch := range o.connectChannel {
+		ch <- value
+		close(ch)
+	}
+	o.connectChannel = nil
+}
+
+func (o *ZooWatcher) WaitForConnected() <-chan bool {
+	if o.IsConnected() {
+		return nil
+	}
+	var ch = make(chan bool)
+	o.connectChannelMutex.Lock()
+	defer o.connectChannelMutex.Unlock()
+	if o.connectChannel == nil {
+		o.connectChannel = []chan bool{ch}
+	} else {
+		o.connectChannel = append(o.connectChannel, ch)
+	}
+	return ch
 }

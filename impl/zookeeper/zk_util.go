@@ -1,6 +1,6 @@
 package zookeeper
 
-import "github.com/samuel/go-zookeeper/zk"
+import "github.com/camsiabor/go-zookeeper/zk"
 
 type ZkIterator func(conn *zk.Conn, current string, parent string, root string, depth int) bool
 

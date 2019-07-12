@@ -2,9 +2,9 @@ package zookeeper
 
 import (
 	"fmt"
+	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qservice/core"
 	"github.com/camsiabor/qservice/impl/memory"
-	"github.com/samuel/go-zookeeper/zk"
 )
 
 type ZGateway struct {
