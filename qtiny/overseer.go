@@ -3,7 +3,6 @@ package qtiny
 import (
 	"fmt"
 	"github.com/camsiabor/qcom/util"
-	"github.com/twinj/uuid"
 	"sync"
 	"sync/atomic"
 )
@@ -12,8 +11,6 @@ type OverseerErrorHandler func(event string, err interface{}, overseer *Overseer
 
 type Overseer struct {
 	LifeCycler
-
-	id string
 
 	serial uint64
 
@@ -53,17 +50,10 @@ func (o *Overseer) Start(config map[string]interface{}) error {
 		return fmt.Errorf("gateway is null")
 	}
 
-	if len(o.id) == 0 {
-		o.id = uuid.NewV4().String()
-	}
-
 	var err error
-	err = o.ServiceRegister(o.id, nil, o.handleReply)
-	if err != nil {
-		return err
-	}
 
-	o.queue, err = o.gateway.Poll(8192)
+	var pollLimit = util.GetInt(config, 8192, "poll.limit")
+	o.queue, err = o.gateway.Poll(pollLimit)
 	if err != nil {
 		return err
 	}
@@ -107,6 +97,12 @@ func (o *Overseer) dispatch(msg *Message) {
 			o.ErrHandler("dispatch", err, o)
 		}
 	}()
+
+	if msg.Type&MessageTypeReply > 0 {
+		o.handleReply(msg)
+		return
+	}
+
 	var service = o.services[msg.Address]
 	if service != nil {
 		msg.overseer = o
@@ -178,7 +174,7 @@ func (o *Overseer) generateMessageId() uint64 {
 		o.mutex.Lock()
 		defer o.mutex.Unlock()
 		if atomic.LoadUint64(&o.serial) >= o.requestsLimit {
-			atomic.StoreUint64(&o.serial, 0)
+			atomic.StoreUint64(&o.serial, 1)
 		}
 		id = atomic.AddUint64(&o.serial, 1)
 	}
@@ -186,9 +182,6 @@ func (o *Overseer) generateMessageId() uint64 {
 }
 
 func (o *Overseer) Post(request *Message) (*Message, error) {
-
-	request.Type = MessageTypeSend
-	request.Sender = o.id
 
 	if request.Timeout > 0 || request.Handler != nil {
 

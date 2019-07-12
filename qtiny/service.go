@@ -11,6 +11,7 @@ type ServiceHandler func(message *Message)
 type ServiceOptions map[string]interface{}
 
 type Service struct {
+	Id      uint64
 	Address string
 	Options ServiceOptions
 	Handler ServiceHandler
@@ -18,99 +19,33 @@ type Service struct {
 	Siblings   []*Service
 	BigBrother *Service
 
-	Mutex sync.RWMutex
+	mutex sync.RWMutex
 
-	consumerPoint int32
-	consumerCount int
-	consumerArray []string
-	consumerMap   map[string]interface{}
+	nodeMutex sync.RWMutex
+	nodePoint int32
+	nodeCount int
+	nodeArray []string
+	nodeMap   map[string]interface{}
 }
 
-func (o *Service) ConsumerAdd(address string, data interface{}) {
-	o.Mutex.Lock()
-	defer o.Mutex.Unlock()
+/* ====================================== handling ==================================== */
 
-	if o.consumerArray == nil {
-		o.consumerArray = []string{address}
-	} else {
-		for i := 0; i < o.consumerCount; i++ {
-			if address == o.consumerArray[i] {
-				return
-			}
+func (o *Service) Handle(message *Message) {
+	if message.Type&MessageTypeBroadcast > 0 {
+		for i := 0; i < len(o.Siblings); i++ {
+			o.Siblings[i].Handler(message)
 		}
-		o.consumerArray = append(o.consumerArray, address)
-	}
-	if o.consumerMap == nil {
-		o.consumerMap = make(map[string]interface{})
-	}
-	o.consumerMap[address] = data
-	o.consumerCount = o.consumerCount + 1
-}
-
-func (o *Service) ConsumerRemove(address string) {
-	o.Mutex.Lock()
-	defer o.Mutex.Unlock()
-	if o.consumerArray == nil {
 		return
 	}
-	var index = -1
-	for i := 0; i < o.consumerCount; i++ {
-		if o.consumerArray[i] == address {
-			index = i
-			break
-		}
-	}
-	if index < 0 {
-		return
-	}
-	var novaIndex = 0
-	var nova = make([]string, o.consumerCount-1)
-	for i := 0; i < o.consumerCount; i++ {
-		if i != index {
-			nova[novaIndex] = o.consumerArray[i]
-			novaIndex = novaIndex + 1
-		}
-	}
-	o.consumerArray = nova
-
-	if o.consumerMap != nil {
-		delete(o.consumerMap, address)
-	}
-	o.consumerCount = o.consumerCount - 1
+	var sibling = o.GetSibling(-1)
+	sibling.Handler(message)
 }
 
-func (o *Service) GetConsumerAddresses() []string {
-	return o.consumerArray
-}
-
-func (o *Service) GetConsumerAddress(index int32) string {
-	if o.consumerArray == nil {
-		return ""
-	}
-	if index < 0 {
-		index = o.consumerPoint
-		if int(atomic.AddInt32(&o.consumerPoint, 1)) > o.consumerCount {
-			o.consumerPoint = 0
-		}
-	}
-	if int(index) >= o.consumerCount {
-		index = 0
-	}
-	return o.consumerArray[index]
-}
-
-func (o *Service) GetConsumerData(address string) interface{} {
-	o.Mutex.RLock()
-	defer o.Mutex.RUnlock()
-	if o.consumerMap == nil {
-		return nil
-	}
-	return o.consumerMap[address]
-}
+/* ====================================== siblings ==================================== */
 
 func (o *Service) AddSibling(silbing *Service) {
-	o.Mutex.Lock()
-	defer o.Mutex.Unlock()
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 	if o.Siblings == nil {
 		o.Siblings = []*Service{o, silbing}
 	} else {
@@ -129,13 +64,86 @@ func (o *Service) GetSibling(index int) *Service {
 	return o.Siblings[index]
 }
 
-func (o *Service) Handle(message *Message) {
-	if message.Type&MessageTypeBroadcast > 0 {
-		for i := 0; i < len(o.Siblings); i++ {
-			o.Siblings[i].Handler(message)
+/* ====================================== remote consumers ==================================== */
+
+func (o *Service) NodeAdd(address string, data interface{}) {
+	o.nodeMutex.Lock()
+	defer o.nodeMutex.Unlock()
+
+	if o.nodeArray == nil {
+		o.nodeArray = []string{address}
+	} else {
+		for i := 0; i < o.nodeCount; i++ {
+			if address == o.nodeArray[i] {
+				return
+			}
 		}
+		o.nodeArray = append(o.nodeArray, address)
+	}
+	if o.nodeMap == nil {
+		o.nodeMap = make(map[string]interface{})
+	}
+	o.nodeMap[address] = data
+	o.nodeCount = o.nodeCount + 1
+}
+
+func (o *Service) NodeRemove(address string) {
+	o.nodeMutex.Lock()
+	defer o.nodeMutex.Unlock()
+	if o.nodeArray == nil {
 		return
 	}
-	var sibling = o.GetSibling(-1)
-	sibling.Handler(message)
+	var index = -1
+	for i := 0; i < o.nodeCount; i++ {
+		if o.nodeArray[i] == address {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return
+	}
+	var novaIndex = 0
+	var nova = make([]string, o.nodeCount-1)
+	for i := 0; i < o.nodeCount; i++ {
+		if i != index {
+			nova[novaIndex] = o.nodeArray[i]
+			novaIndex = novaIndex + 1
+		}
+	}
+	o.nodeArray = nova
+
+	if o.nodeMap != nil {
+		delete(o.nodeMap, address)
+	}
+	o.nodeCount = o.nodeCount - 1
+}
+
+func (o *Service) NodeAddresses() []string {
+	return o.nodeArray
+}
+
+func (o *Service) NodeAddress(index int32) string {
+	if o.nodeArray == nil {
+		return ""
+	}
+	if index < 0 {
+		index = o.nodePoint
+		if int(atomic.AddInt32(&o.nodePoint, 1)) > o.nodeCount {
+			o.nodePoint = 0
+		}
+	}
+	if int(index) >= o.nodeCount {
+		index = 0
+	}
+	return o.nodeArray[index]
+}
+
+func (o *Service) NodeGetData(address string) interface{} {
+	o.nodeMutex.RLock()
+	defer o.nodeMutex.RUnlock()
+	if o.nodeMap == nil {
+		return nil
+	}
+	return o.nodeMap[address]
 }

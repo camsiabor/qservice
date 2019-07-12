@@ -39,6 +39,15 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 			_ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
 			_ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
 			o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+
+			if o.Subscribers != nil {
+				o.SubscriberMutex.RLock()
+				for _, subscriber := range o.Subscribers {
+					go o.serviceCreateRegistry(subscriber.Address, subscriber.Options)
+				}
+				o.SubscriberMutex.RUnlock()
+			}
+
 		}
 	})
 
@@ -129,8 +138,8 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	}
 
 	var service = o.ServiceRemoteGet(message.Address)
-	var all = service.GetConsumerAddresses()
-	if all == nil || len(all) == 0 {
+	if service == nil || service.NodeAddresses() == nil {
+		service = o.ServiceRemoteNew(message.Address)
 		var serviceZNodePath = o.GetServiceZNodePath(message.Address)
 		var children, _, err = o.watcher.GetConn().Children(serviceZNodePath)
 		if err != nil {
@@ -141,11 +150,11 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 			return fmt.Errorf("no consumer found for " + message.Address)
 		}
 		for i := 0; i < len(children); i++ {
-			service.ConsumerAdd(children[i], children[i])
+			service.NodeAdd(children[i], children[i])
 		}
 	}
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
-		var consumerAddresses = service.GetConsumerAddresses()
+		var consumerAddresses = service.NodeAddresses()
 		for i := 0; i < len(consumerAddresses); i++ {
 			var consumerAddress = consumerAddresses[i]
 			var perr = o.publish(consumerAddress, "/b", data)
@@ -154,7 +163,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 			}
 		}
 	} else {
-		var consumerAddress = service.GetConsumerAddress(-1)
+		var consumerAddress = service.NodeAddress(-1)
 		err = o.publish(consumerAddress, "/p", data)
 	}
 	return err
@@ -165,7 +174,8 @@ func (o *ZGateway) Broadcast(message *qtiny.Message) error {
 	return o.Post(message)
 }
 
-func (o *ZGateway) ServiceRegister(address string, options qtiny.ServiceOptions) error {
+func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOptions) error {
+	<-o.watcher.WaitForConnected()
 
 	var parent = o.GetServiceZNodePath(address)
 	var err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
@@ -175,10 +185,12 @@ func (o *ZGateway) ServiceRegister(address string, options qtiny.ServiceOptions)
 
 	var path = o.GetServiceZNodeSelfPath(address)
 	err = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-	if err != nil {
-		return err
-	}
+	return err
+}
 
+func (o *ZGateway) ServiceRegister(address string, options qtiny.ServiceOptions) error {
+	o.SubscriberAdd(address, options)
+	go o.serviceCreateRegistry(address, options)
 	return nil
 }
 

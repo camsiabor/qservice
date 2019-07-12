@@ -2,6 +2,7 @@ package qtiny
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"time"
 )
@@ -56,6 +57,9 @@ func NewMessage(address string, data interface{}, timeout time.Duration) (messag
 }
 
 func (o *Message) Reply(code int, data interface{}) error {
+	if o.ReplyId == 0 {
+		return fmt.Errorf("no reply id")
+	}
 	o.Type = MessageTypeReply
 	o.ReplyCode = code
 	o.ReplyData = data
@@ -168,4 +172,22 @@ func (o *Message) FromMap(m map[string]interface{}) {
 	o.ReplyErr = util.AsStr(m["ReplyErr"], "")
 	o.Headers = util.AsMap(m["Headers"], false)
 	o.Options = util.AsMap(m["Options"], false)
+}
+
+func (o *Message) Clone() *Message {
+	var clone = &Message{}
+	clone.Type = o.Type
+	clone.Address = o.Address
+	clone.Sender = o.Sender
+	clone.Data = o.Data
+	clone.ReplyId = o.ReplyId
+	if clone.Type&MessageTypeReply > 0 {
+		clone.ReplyCode = o.ReplyCode
+		clone.ReplyErr = o.ReplyErr
+		clone.ReplyData = o.ReplyData
+		clone.ReplyErr = o.ReplyErr
+	}
+	clone.Headers = o.Headers
+	clone.Options = o.Options
+	return clone
 }
