@@ -14,10 +14,10 @@ type MessageHandler func(message *Message)
 type MessageType int
 
 const (
-	SEND      MessageType = 0x0001
-	REPLY     MessageType = 0x0002
-	FAIL      MessageType = 0x0004
-	BROADCAST MessageType = 0x1000
+	MessageTypeSend      MessageType = 0x0001
+	MessageTypeReply     MessageType = 0x0002
+	MessageTypeFail      MessageType = 0x0004
+	MessageTypeBroadcast MessageType = 0x1000
 )
 
 type Message struct {
@@ -56,7 +56,7 @@ func NewMessage(address string, data interface{}, timeout time.Duration) (messag
 }
 
 func (o *Message) Reply(code int, data interface{}) error {
-	o.Type = REPLY
+	o.Type = MessageTypeReply
 	o.ReplyCode = code
 	o.ReplyData = data
 	o.Address = o.Sender
@@ -65,11 +65,11 @@ func (o *Message) Reply(code int, data interface{}) error {
 }
 
 func (o *Message) IsError() bool {
-	return len(o.ReplyErr) > 0 || ((o.Type & FAIL) > 0)
+	return len(o.ReplyErr) > 0 || ((o.Type & MessageTypeFail) > 0)
 }
 
 func (o *Message) Error(code int, errmsg string) error {
-	o.Type = REPLY | FAIL
+	o.Type = MessageTypeReply | MessageTypeFail
 	o.ReplyCode = code
 	o.ReplyErr = errmsg
 	_, err := o.overseer.Post(o)

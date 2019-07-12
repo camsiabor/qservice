@@ -1,6 +1,7 @@
 package qtiny
 
 import (
+	"math/rand"
 	"sync"
 	"sync/atomic"
 )
@@ -13,9 +14,11 @@ type Service struct {
 	Address string
 	Options ServiceOptions
 	Handler ServiceHandler
-	Prev    *Service
-	Next    *Service
-	Mutex   sync.RWMutex
+
+	Siblings   []*Service
+	BigBrother *Service
+
+	Mutex sync.RWMutex
 
 	consumerPoint int32
 	consumerCount int
@@ -76,6 +79,10 @@ func (o *Service) ConsumerRemove(address string) {
 	o.consumerCount = o.consumerCount - 1
 }
 
+func (o *Service) GetConsumerAddresses() []string {
+	return o.consumerArray
+}
+
 func (o *Service) GetConsumerAddress(index int32) string {
 	if o.consumerArray == nil {
 		return ""
@@ -92,7 +99,7 @@ func (o *Service) GetConsumerAddress(index int32) string {
 	return o.consumerArray[index]
 }
 
-func (o *Service) GetConsumer(address string) interface{} {
+func (o *Service) GetConsumerData(address string) interface{} {
 	o.Mutex.RLock()
 	defer o.Mutex.RUnlock()
 	if o.consumerMap == nil {
@@ -101,21 +108,34 @@ func (o *Service) GetConsumer(address string) interface{} {
 	return o.consumerMap[address]
 }
 
-func (o *Service) Tail() (result *Service) {
-	var current = o
-	for current.Next != nil {
-		current = current.Next
+func (o *Service) AddSibling(silbing *Service) {
+	o.Mutex.Lock()
+	defer o.Mutex.Unlock()
+	if o.Siblings == nil {
+		o.Siblings = []*Service{o, silbing}
+	} else {
+		o.Siblings = append(o.Siblings, silbing)
 	}
-	return current
+	silbing.BigBrother = o
+}
+
+func (o *Service) GetSibling(index int) *Service {
+	if o.Siblings == nil {
+		return o
+	}
+	if index < 0 {
+		index = rand.Intn(len(o.Siblings))
+	}
+	return o.Siblings[index]
 }
 
 func (o *Service) Handle(message *Message) {
-	var current = o
-	for {
-		go current.Handler(message)
-		if current.Next == nil {
-			return
+	if message.Type&MessageTypeBroadcast > 0 {
+		for i := 0; i < len(o.Siblings); i++ {
+			o.Siblings[i].Handler(message)
 		}
-		current = current.Next
+		return
 	}
+	var sibling = o.GetSibling(-1)
+	sibling.Handler(message)
 }

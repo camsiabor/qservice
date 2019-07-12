@@ -156,11 +156,8 @@ func (o *Overseer) ServiceRegister(address string, options ServiceOptions, handl
 	if current == nil {
 		o.services[address] = service
 	} else {
-		var tail = current.Tail()
-		tail.Next = service
-		service.Prev = tail
+		current.AddSibling(service)
 	}
-
 	return o.gateway.ServiceRegister(address, options)
 
 }
@@ -190,7 +187,7 @@ func (o *Overseer) generateMessageId() uint64 {
 
 func (o *Overseer) Post(request *Message) (*Message, error) {
 
-	request.Type = SEND
+	request.Type = MessageTypeSend
 	request.Sender = o.id
 
 	if request.Timeout > 0 || request.Handler != nil {
@@ -229,7 +226,7 @@ func (o *Overseer) Post(request *Message) (*Message, error) {
 func (o *Overseer) Broadcast(message *Message) error {
 	// TODO implement
 
-	message.Type = BROADCAST
+	message.Type = MessageTypeBroadcast
 	return o.gateway.Post(message)
 
 }
