@@ -137,6 +137,14 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 		return err
 	}
 
+	if message.Type&qtiny.MessageTypeReply > 0 {
+		message.Address = message.Sender
+		message.Sender = o.GetId()
+		return o.publish(message.Address, "/r", data)
+	} else {
+		message.Sender = o.GetId()
+	}
+
 	var service = o.ServiceRemoteGet(message.Address)
 	if service == nil || service.NodeAddresses() == nil {
 		service = o.ServiceRemoteNew(message.Address)
@@ -175,7 +183,10 @@ func (o *ZGateway) Broadcast(message *qtiny.Message) error {
 }
 
 func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOptions) error {
-	<-o.watcher.WaitForConnected()
+	var ch = o.watcher.WaitForConnected()
+	if ch != nil {
+		<-ch
+	}
 
 	var parent = o.GetServiceZNodePath(address)
 	var err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
@@ -230,6 +241,7 @@ func (o *ZGateway) messageConsume(data []byte) {
 	// TODO error handling
 	var msg = &qtiny.Message{}
 	_ = msg.FromJson(data)
+	msg.Timeout = 0
 	o.Queue <- msg
 }
 
@@ -242,5 +254,5 @@ func (o *ZGateway) GetServiceZNodePath(address string) string {
 }
 
 func (o *ZGateway) GetServiceZNodeSelfPath(address string) string {
-	return fmt.Sprintf("%s/%s/%s:%s", PathService, address, o.GetId(), o.GetTag())
+	return fmt.Sprintf("%s/%s/%s", PathService, address, o.GetId())
 }

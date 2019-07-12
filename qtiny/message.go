@@ -28,8 +28,10 @@ type Message struct {
 	Data    interface{}
 	Timeout time.Duration
 
-	Err    error
-	Sender string
+	Err error
+
+	Sender  string
+	Replier string
 
 	Headers MessageHeaders
 	Options MessageOptions
@@ -63,7 +65,6 @@ func (o *Message) Reply(code int, data interface{}) error {
 	o.Type = MessageTypeReply
 	o.ReplyCode = code
 	o.ReplyData = data
-	o.Address = o.Sender
 	_, err := o.overseer.Post(o)
 	return err
 }
@@ -149,6 +150,7 @@ func (o *Message) ToMap() map[string]interface{} {
 	m["Type"] = o.Type
 	m["Address"] = o.Address
 	m["Sender"] = o.Sender
+	m["Replier"] = o.Replier
 	m["Data"] = o.Data
 	m["Timeout"] = o.Timeout
 	m["ReplyId"] = o.ReplyId
@@ -164,6 +166,7 @@ func (o *Message) FromMap(m map[string]interface{}) {
 	o.Type = MessageType(util.AsInt(m["Type"], 0))
 	o.Address = util.AsStr(m["Address"], "")
 	o.Sender = util.AsStr(m["Sender"], "")
+	o.Replier = util.AsStr(m["Replier"], "")
 	o.Data = m["Data"]
 	o.Timeout = time.Duration(util.AsInt64(m["Timeout"], 0))
 	o.ReplyId = util.AsUInt64(m["ReplyId"], 0)
@@ -179,6 +182,7 @@ func (o *Message) Clone() *Message {
 	clone.Type = o.Type
 	clone.Address = o.Address
 	clone.Sender = o.Sender
+	clone.Replier = o.Replier
 	clone.Data = o.Data
 	clone.ReplyId = o.ReplyId
 	if clone.Type&MessageTypeReply > 0 {
