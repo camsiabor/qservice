@@ -132,17 +132,19 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
 	}
+
+	if message.Type&qtiny.MessageTypeReply > 0 {
+		message.Address = message.Sender
+	}
+
+	message.Sender = o.GetId()
 	var data, err = message.ToJson()
 	if err != nil {
 		return err
 	}
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
-		message.Address = message.Sender
-		message.Sender = o.GetId()
 		return o.publish(message.Address, "/r", data)
-	} else {
-		message.Sender = o.GetId()
 	}
 
 	var service = o.ServiceRemoteGet(message.Address)
