@@ -3,6 +3,8 @@ package qtiny
 type Gateway interface {
 	LifeCycler
 
+	GetId() string
+
 	Poll(limit int) (chan *Message, error)
 	Post(message *Message) error
 	Broadcast(message *Message) error

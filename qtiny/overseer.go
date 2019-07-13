@@ -223,3 +223,11 @@ func (o *Overseer) Broadcast(message *Message) error {
 	return o.gateway.Post(message)
 
 }
+
+func (o *Overseer) GetGateway() Gateway {
+	return o.gateway
+}
+
+func (o *Overseer) SetGateway(gateway Gateway) {
+	o.gateway = gateway
+}

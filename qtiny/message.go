@@ -32,6 +32,7 @@ type Message struct {
 
 	Sender  string
 	Replier string
+	Session string
 
 	Headers MessageHeaders
 	Options MessageOptions
@@ -151,14 +152,23 @@ func (o *Message) ToMap() map[string]interface{} {
 	m["Address"] = o.Address
 	m["Sender"] = o.Sender
 	m["Replier"] = o.Replier
+	m["Session"] = o.Session
 	m["Data"] = o.Data
 	m["Timeout"] = o.Timeout
 	m["ReplyId"] = o.ReplyId
 	m["ReplyCode"] = o.ReplyCode
-	m["ReplyData"] = o.ReplyData
-	m["ReplyErr"] = o.ReplyErr
-	m["Headers"] = o.Headers
-	m["Options"] = o.Options
+	if o.ReplyData != nil {
+		m["ReplyData"] = o.ReplyData
+	}
+	if len(o.ReplyErr) > 0 {
+		m["ReplyErr"] = o.ReplyErr
+	}
+	if o.Headers != nil {
+		m["Headers"] = o.Headers
+	}
+	if o.Options != nil {
+		m["Options"] = o.Options
+	}
 	return m
 }
 
@@ -167,6 +177,7 @@ func (o *Message) FromMap(m map[string]interface{}) {
 	o.Address = util.AsStr(m["Address"], "")
 	o.Sender = util.AsStr(m["Sender"], "")
 	o.Replier = util.AsStr(m["Replier"], "")
+	o.Session = util.AsStr(m["Session"], "")
 	o.Data = m["Data"]
 	o.Timeout = time.Duration(util.AsInt64(m["Timeout"], 0))
 	o.ReplyId = util.AsUInt64(m["ReplyId"], 0)
@@ -183,6 +194,7 @@ func (o *Message) Clone() *Message {
 	clone.Address = o.Address
 	clone.Sender = o.Sender
 	clone.Replier = o.Replier
+	clone.Session = o.Session
 	clone.Data = o.Data
 	clone.ReplyId = o.ReplyId
 	if clone.Type&MessageTypeReply > 0 {
