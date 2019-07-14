@@ -127,14 +127,11 @@ func (o *Service) NodeAddress(index int32) string {
 	if o.nodeArray == nil {
 		return ""
 	}
-	if index < 0 {
+	if index < 0 || int(index) >= o.nodeCount {
 		index = o.nodePoint
-		if int(atomic.AddInt32(&o.nodePoint, 1)) > o.nodeCount {
+		if int(atomic.AddInt32(&o.nodePoint, 1)) >= o.nodeCount {
 			o.nodePoint = 0
 		}
-	}
-	if int(index) >= o.nodeCount {
-		index = 0
 	}
 	return o.nodeArray[index]
 }

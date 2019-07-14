@@ -145,6 +145,7 @@ func (o *MGateway) ServiceRemoteNew(address string) *qtiny.Service {
 	if service == nil {
 		service = &qtiny.Service{}
 		service.Address = address
+		o.Consumers[address] = service
 	}
 	return service
 }
