@@ -1,5 +1,7 @@
 package qtiny
 
+import "log"
+
 type Gateway interface {
 	LifeCycler
 
@@ -11,4 +13,7 @@ type Gateway interface {
 
 	ServiceRegister(address string, options ServiceOptions) error
 	ServiceUnregister(address string) error
+
+	GetLogger() *log.Logger
+	SetLogger(logger *log.Logger)
 }

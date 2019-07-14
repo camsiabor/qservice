@@ -70,7 +70,7 @@ func (o *WatchBox) loop() {
 		case WatchTypeChildren:
 			data, stat, ch, err = o.watcher.conn.ChildrenW(o.path)
 		}
-		if !o.routine(&event, stat, data, o, o.watcher, err) {
+		if !o.run(&event, stat, data, err) {
 			break
 		}
 		event, ok = <-ch
@@ -84,14 +84,14 @@ func (o *WatchBox) loop() {
 	}
 }
 
-func (o *WatchBox) run(event *zk.Event, stat *zk.Stat, data interface{}, err error) {
+func (o *WatchBox) run(event *zk.Event, stat *zk.Stat, data interface{}, err error) (ret bool) {
 	defer func() {
 		var pan = recover()
 		if pan == nil {
 			return
 		}
 		err = util.AsError(pan)
-		o.routine(event, stat, data, o, o.watcher, err)
+		ret = o.routine(event, stat, data, o, o.watcher, err)
 	}()
-	o.routine(event, stat, data, o, o.watcher, err)
+	return o.routine(event, stat, data, o, o.watcher, err)
 }

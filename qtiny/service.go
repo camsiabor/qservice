@@ -66,6 +66,28 @@ func (o *Service) GetSibling(index int) *Service {
 
 /* ====================================== remote consumers ==================================== */
 
+func (o *Service) NodeSet(address []string, data []interface{}) {
+	o.nodeMutex.Lock()
+	defer o.nodeMutex.Unlock()
+
+	var m = make(map[string]interface{})
+	for i := range address {
+		var oneaddr = address[i]
+		var onedata interface{}
+		if data == nil {
+			onedata = oneaddr
+		} else {
+			onedata = data[i]
+		}
+		if onedata == nil {
+			onedata = oneaddr
+		}
+		m[oneaddr] = onedata
+	}
+	o.nodeMap = m
+	o.nodeArray = address
+}
+
 func (o *Service) NodeAdd(address string, data interface{}) {
 	o.nodeMutex.Lock()
 	defer o.nodeMutex.Unlock()

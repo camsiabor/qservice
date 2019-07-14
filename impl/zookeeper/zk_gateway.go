@@ -8,18 +8,25 @@ import (
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
 	"os"
+	"sync"
 	"time"
 )
 
 type ZGateway struct {
 	memory.MGateway
-	watcher       *ZooWatcher
-	pathNodeQueue string
-	timer         *qroutine.Timer
+	watcher *ZooWatcher
+
+	pathNodeQueue      string
+	pathNodeConnection string
+
+	consumeSemaphore sync.WaitGroup
+
+	timer *qroutine.Timer
 }
 
 const PathNodeQueue = "/qnode"
 const PathService = "/qservice"
+const PathConnection = "/qconn"
 
 func (o *ZGateway) Init(config map[string]interface{}) error {
 
@@ -36,26 +43,8 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	}
 
 	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
-	o.watcher.AddConnectCallback(func(event *zk.Event, watcher *ZooWatcher, err error) {
-		if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly {
-			// TODO exception
-			var hostname, _ = os.Hostname()
-			if len(hostname) == 0 {
-				hostname = uuid.NewV4().String()
-			}
-
-			_ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
-			_ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-			_ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-			_ = watcher.Create(o.pathNodeQueue+"/a", []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-			//_ = watcher.Create("/powerover", []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-
-			o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
-
-			o.timer.Wake()
-
-		}
-	})
+	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
+	o.watcher.AddConnectCallback(o.handleConnectionEvents)
 
 	if o.timer != nil {
 		o.timer.Stop()
@@ -91,6 +80,37 @@ func (o *ZGateway) Stop(config map[string]interface{}) error {
 		}
 	}
 	return o.MGateway.Stop(config)
+}
+
+func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, err error) {
+
+	if event.State == zk.StateDisconnected {
+		if o.Logger != nil {
+			o.Logger.Fatal("zk gateway disconnected ", o.watcher.Endpoints)
+		}
+		return
+	}
+
+	if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly {
+		if o.Logger != nil {
+			o.Logger.Println("zk gateway connected ", o.watcher.Endpoints)
+		}
+
+		var hostname, _ = os.Hostname()
+		hostname = hostname + ":" + uuid.NewV4().String()
+
+		_ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+
+		_ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_ = watcher.Create(o.pathNodeConnection+"/"+hostname, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+
+		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+
+		o.timer.Wake()
+	}
 }
 
 func (o *ZGateway) loop() {
@@ -178,7 +198,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 		var serviceZNodePath = o.GetServiceZNodePath(message.Address)
 		var children, _, err = o.watcher.GetConn().Children(serviceZNodePath)
 		if err != nil {
-			return err
+			return fmt.Errorf("no consumer found : " + err.Error())
 		}
 		o.watcher.Watch(WatchTypeChildren, serviceZNodePath, serviceZNodePath, o.serviceRegistryWatch)
 		if children == nil || len(children) == 0 {
@@ -215,9 +235,15 @@ func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOp
 	if err != nil {
 		return err
 	}
-
 	var path = o.GetServiceZNodeSelfPath(address)
 	err = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	if o.Logger != nil {
+		if err == nil {
+			o.Logger.Println("service register ", path)
+		} else {
+			o.Logger.Fatal("service register fail ", path, " : ", err.Error())
+		}
+	}
 	return err
 }
 
@@ -246,6 +272,26 @@ func (o *ZGateway) ServiceUnregister(address string) error {
 }
 
 func (o *ZGateway) serviceRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+	if err != nil && o.Logger != nil {
+		o.Logger.Fatal("service registry watch error", err.Error())
+		return true
+	}
+	if data == nil {
+		return true
+	}
+	var children, ok = data.([]string)
+	if o.Logger != nil {
+		o.Logger.Println("remote consumer changes", box.path, children)
+	}
+	if !ok {
+		return true
+	}
+	var address = box.path
+	var service = o.ServiceRemoteGet(address)
+	if service == nil {
+		return true
+	}
+	service.NodeSet(children, nil)
 	return true
 }
 
@@ -258,26 +304,33 @@ func (o *ZGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interfa
 		return true
 	}
 	var n = len(children)
+	if n == 0 {
+		return true
+	}
 	var root = box.GetPath()
 	var conn = o.watcher.GetConn()
+
 	for i := 0; i < n; i++ {
-		var path = fmt.Sprintf("%s/%s", root, children[i])
-		var data, stat, err = conn.Get(path)
-		if err != nil {
-			continue
-		}
-		go o.messageConsume(data)
-		err = conn.Delete(path, stat.Version)
+		o.consumeSemaphore.Add(1)
+		go o.messageConsume(conn, root, children[i])
 	}
+	o.consumeSemaphore.Wait()
+
 	return true
 }
 
-func (o *ZGateway) messageConsume(data []byte) {
-	// TODO error handling
+func (o *ZGateway) messageConsume(conn *zk.Conn, root string, child string) {
+	defer o.consumeSemaphore.Done()
+	var path = root + "/" + child
+	var data, stat, err = conn.Get(path)
+	if err != nil {
+		return
+	}
 	var msg = &qtiny.Message{}
 	_ = msg.FromJson(data)
 	msg.Timeout = 0
 	o.Queue <- msg
+	_ = conn.Delete(path, stat.Version)
 }
 
 func (o *ZGateway) GetQueueZNodePath(nodeId string) string {
