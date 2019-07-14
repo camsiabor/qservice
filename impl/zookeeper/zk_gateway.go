@@ -89,7 +89,7 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 
 	if event.State == zk.StateDisconnected {
 		if o.Logger != nil {
-			o.Logger.Fatal("zk gateway disconnected ", o.watcher.Endpoints)
+			o.Logger.Println("zk gateway disconnected ", o.watcher.Endpoints)
 		}
 		return
 	}
@@ -249,7 +249,7 @@ func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOp
 	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		if o.Logger != nil {
-			o.Logger.Fatal("service register fail ", parent, " : ", err.Error())
+			o.Logger.Println("service register fail ", parent, " : ", err.Error())
 		}
 		return err
 	}
@@ -259,7 +259,7 @@ func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOp
 		if cerr == nil {
 			o.Logger.Println("service register ", path)
 		} else {
-			o.Logger.Fatal("service register fail ", path, " : ", cerr.Error())
+			o.Logger.Println("service register fail ", path, " : ", cerr.Error())
 		}
 	}
 	return cerr
@@ -291,7 +291,7 @@ func (o *ZGateway) ServiceUnregister(address string) error {
 
 func (o *ZGateway) serviceRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
 	if err != nil && o.Logger != nil {
-		o.Logger.Fatal("service registry watch error", err.Error())
+		o.Logger.Println("service registry watch error", err.Error())
 		return true
 	}
 	if data == nil {
