@@ -115,11 +115,11 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 
 		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
-		o.serviceCreateRegistries()
-
 		go func() {
-			time.Sleep(o.watcher.SessionTimeout + time.Second)
-			o.serviceCreateRegistries()
+			for i := 0; i < 3; i++ {
+				o.serviceCreateRegistries()
+				time.Sleep(o.watcher.SessionTimeout + time.Second)
+			}
 		}()
 
 		o.timer.Wake()
