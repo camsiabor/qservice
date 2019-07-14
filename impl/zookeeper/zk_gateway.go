@@ -3,15 +3,19 @@ package zookeeper
 import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
+	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
+	"github.com/twinj/uuid"
+	"os"
+	"time"
 )
 
 type ZGateway struct {
 	memory.MGateway
-	watcher *ZooWatcher
-
+	watcher       *ZooWatcher
 	pathNodeQueue string
+	timer         *qroutine.Timer
 }
 
 const PathNodeQueue = "/qnode"
@@ -35,23 +39,31 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	o.watcher.AddConnectCallback(func(event *zk.Event, watcher *ZooWatcher, err error) {
 		if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly {
 			// TODO exception
+			var hostname, _ = os.Hostname()
+			if len(hostname) == 0 {
+				hostname = uuid.NewV4().String()
+			}
+
 			_ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
 			_ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
 			_ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+			_ = watcher.Create(o.pathNodeQueue+"/a", []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+			//_ = watcher.Create("/powerover", []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+
 			o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
-			if o.Subscribers != nil {
-				o.SubscriberMutex.RLock()
-				for _, subscriber := range o.Subscribers {
-					go o.serviceCreateRegistry(subscriber.Address, subscriber.Options)
-				}
-				o.SubscriberMutex.RUnlock()
-			}
+			o.timer.Wake()
 
 		}
 	})
 
-	return nil
+	if o.timer != nil {
+		o.timer.Stop()
+	}
+
+	o.timer = &qroutine.Timer{}
+	err = o.timer.Start(0, time.Duration(3)*time.Minute, o.timerloop)
+	return err
 }
 
 func (o *ZGateway) Start(config map[string]interface{}) error {
@@ -69,6 +81,9 @@ func (o *ZGateway) Start(config map[string]interface{}) error {
 }
 
 func (o *ZGateway) Stop(config map[string]interface{}) error {
+	if o.timer != nil {
+		o.timer.Stop()
+	}
 	if o.watcher != nil {
 		var err = o.watcher.Stop(config)
 		if err != nil {
@@ -78,7 +93,7 @@ func (o *ZGateway) Stop(config map[string]interface{}) error {
 	return o.MGateway.Stop(config)
 }
 
-func (o *ZGateway) Loop() {
+func (o *ZGateway) loop() {
 	var ok bool
 	var msg *qtiny.Message
 	for {
@@ -98,7 +113,17 @@ func (o *ZGateway) Loop() {
 			}
 		}
 	}
+}
 
+func (o *ZGateway) timerloop(timer *qroutine.Timer, err error) {
+	if err != nil {
+		return
+	}
+	var ch = o.watcher.WaitForConnected()
+	if ch != nil {
+		<-ch
+	}
+	o.serviceCreateRegistries()
 }
 
 func (o *ZGateway) Poll(limit int) (chan *qtiny.Message, error) {
@@ -185,11 +210,6 @@ func (o *ZGateway) Broadcast(message *qtiny.Message) error {
 }
 
 func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOptions) error {
-	var ch = o.watcher.WaitForConnected()
-	if ch != nil {
-		<-ch
-	}
-
 	var parent = o.GetServiceZNodePath(address)
 	var err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
@@ -201,9 +221,22 @@ func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOp
 	return err
 }
 
+func (o *ZGateway) serviceCreateRegistries() {
+	if o.Subscribers == nil {
+		return
+	}
+	o.SubscriberMutex.RLock()
+	defer o.SubscriberMutex.RUnlock()
+	for _, subscriber := range o.Subscribers {
+		go o.serviceCreateRegistry(subscriber.Address, subscriber.Options)
+	}
+}
+
 func (o *ZGateway) ServiceRegister(address string, options qtiny.ServiceOptions) error {
 	o.SubscriberAdd(address, options)
-	go o.serviceCreateRegistry(address, options)
+	if o.watcher.IsConnected() {
+		go o.serviceCreateRegistry(address, options)
+	}
 	return nil
 }
 

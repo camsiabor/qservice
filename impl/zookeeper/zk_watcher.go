@@ -58,12 +58,12 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 	}
 
 	if o.SessionTimeout <= 0 {
-		var timeout = util.GetInt64("session.timeout", 10)
+		var timeout = util.GetInt64(config, 10, "session.timeout")
 		o.SessionTimeout = time.Duration(timeout) * time.Second
 	}
 
 	if o.ReconnectInterval <= 0 {
-		var interval = util.GetInt64("reconnect.interval", 10)
+		var interval = util.GetInt64(config, 10, "reconnect.interval")
 		o.ReconnectInterval = time.Duration(interval) * time.Second
 	}
 	if o.conn != nil {

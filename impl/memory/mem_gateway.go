@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
+	"github.com/sirupsen/logrus"
 	"github.com/twinj/uuid"
+	"log"
 	"sync"
 )
 
@@ -15,6 +17,7 @@ type MGateway struct {
 	Mutex sync.Mutex
 
 	Looping bool
+	Logger  *log.Logger
 
 	QueueLimit int
 	Queue      chan *qtiny.Message
@@ -53,6 +56,10 @@ func (o *MGateway) Start(config map[string]interface{}) error {
 			o.QueueLimit = 8192
 		}
 		o.Queue = make(chan *qtiny.Message, o.QueueLimit)
+	}
+
+	if o.Logger == nil {
+		logrus.New()
 	}
 
 	o.Looping = true
@@ -207,4 +214,12 @@ func (o *MGateway) GetId() string {
 
 func (o *MGateway) GetTag() string {
 	return o.tag
+}
+
+func (o *MGateway) GetLogger() *log.Logger {
+	return o.Logger
+}
+
+func (o *MGateway) SetLogger(logger *log.Logger) {
+	o.Logger = logger
 }
