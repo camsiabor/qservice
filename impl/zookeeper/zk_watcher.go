@@ -205,16 +205,16 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 	go box.loop()
 }
 
-func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []zk.ACL) error {
+func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []zk.ACL) (bool, error) {
 	exists, _, err := o.conn.Exists(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if exists {
-		return nil
+		return true, nil
 	}
 	_, err = o.conn.Create(path, data, createflags, acl)
-	return err
+	return false, err
 }
 
 func (o *ZooWatcher) GetConn() *zk.Conn {

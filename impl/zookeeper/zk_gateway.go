@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
+	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
@@ -50,8 +51,10 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 		o.timer.Stop()
 	}
 
+	var scanInterval = util.GetInt(config, 3*60, "scan.interval")
+
 	o.timer = &qroutine.Timer{}
-	err = o.timer.Start(0, time.Duration(3)*time.Minute, o.timerloop)
+	err = o.timer.Start(0, time.Duration(scanInterval)*time.Second, o.timerloop)
 	return err
 }
 
@@ -99,17 +102,29 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 		var hostname, _ = os.Hostname()
 		hostname = hostname + ":" + uuid.NewV4().String()
 
-		_ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
 
-		_ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_ = watcher.Create(o.pathNodeConnection+"/"+hostname, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeConnection+"/"+hostname, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 
 		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
+		o.serviceCreateRegistries()
+
+		go func() {
+			time.Sleep(o.watcher.SessionTimeout + time.Second)
+			o.serviceCreateRegistries()
+		}()
+
 		o.timer.Wake()
+
+		if o.Logger != nil {
+			o.Logger.Println("zk gate connected setup fin")
+		}
+
 	}
 }
 
@@ -231,20 +246,23 @@ func (o *ZGateway) Broadcast(message *qtiny.Message) error {
 
 func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOptions) error {
 	var parent = o.GetServiceZNodePath(address)
-	var err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
+	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
+		if o.Logger != nil {
+			o.Logger.Fatal("service register fail ", parent, " : ", err.Error())
+		}
 		return err
 	}
 	var path = o.GetServiceZNodeSelfPath(address)
-	err = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-	if o.Logger != nil {
-		if err == nil {
+	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	if !exist && o.Logger != nil {
+		if cerr == nil {
 			o.Logger.Println("service register ", path)
 		} else {
-			o.Logger.Fatal("service register fail ", path, " : ", err.Error())
+			o.Logger.Fatal("service register fail ", path, " : ", cerr.Error())
 		}
 	}
-	return err
+	return cerr
 }
 
 func (o *ZGateway) serviceCreateRegistries() {
