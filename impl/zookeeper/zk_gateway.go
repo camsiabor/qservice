@@ -17,6 +17,7 @@ type ZGateway struct {
 	memory.MGateway
 	watcher *ZooWatcher
 
+	connectId          string
 	pathNodeQueue      string
 	pathNodeConnection string
 
@@ -99,8 +100,10 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 			o.Logger.Println("zk gateway connected ", o.watcher.Endpoints)
 		}
 
-		var hostname, _ = os.Hostname()
-		hostname = hostname + ":" + uuid.NewV4().String()
+		if len(o.connectId) == 0 {
+			var hostname, _ = os.Hostname()
+			o.connectId = hostname + ":" + uuid.NewV4().String()
+		}
 
 		_, _ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		_, _ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
@@ -108,7 +111,7 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 
 		_, _ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(o.pathNodeConnection+"/"+hostname, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 
 		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
