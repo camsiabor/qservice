@@ -203,9 +203,15 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 
 	message.Sender = o.GetId()
 
-	var subscriber = o.Subscribers[message.Address]
-	if subscriber != nil {
+	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.MGateway.Post(message)
+	}
+
+	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
+		var subscriber = o.Subscribers[message.Address]
+		if subscriber != nil {
+			return o.MGateway.Post(message)
+		}
 	}
 
 	var data, err = message.ToJson()

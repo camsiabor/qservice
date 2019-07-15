@@ -13,6 +13,7 @@ type MessageHeaders map[string]interface{}
 type MessageHandler func(message *Message)
 
 type MessageType int
+type MessageFlag int
 
 const (
 	MessageTypeSend      MessageType = 0x0001
@@ -21,8 +22,14 @@ const (
 	MessageTypeBroadcast MessageType = 0x1000
 )
 
+const (
+	MessageFlagLocalOnly  MessageFlag = 0x0001
+	MessageFlagRemoteOnly MessageFlag = 0x0002
+)
+
 type Message struct {
 	Type MessageType
+	Flag MessageFlag
 
 	Address string
 	Data    interface{}
