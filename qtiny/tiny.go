@@ -35,6 +35,7 @@ type Tiny struct {
 
 	mutex sync.RWMutex
 
+	flag    TinyFlag
 	options TinyOptions
 	config  map[string]interface{}
 }

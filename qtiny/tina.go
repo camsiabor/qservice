@@ -1,6 +1,8 @@
 package qtiny
 
 import (
+	"bitbucket.org/avd/go-ipc/sync"
+	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"log"
@@ -14,7 +16,10 @@ func GetTina() *Tina {
 }
 
 type Tina struct {
-	tinys map[string]Tiny
+	tinaMutex sync.RWMutex
+
+	tinyMutex sync.RWMutex
+	tinys     map[string]*Tiny
 
 	gateway     Gateway
 	microroller *Microroller
@@ -25,6 +30,10 @@ type Tina struct {
 }
 
 func (o *Tina) Start(config map[string]interface{}) error {
+
+	o.tinaMutex.Lock()
+	defer o.tinaMutex.Unlock()
+
 	o.config = config
 	if o.config == nil {
 		o.config = make(map[string]interface{})
@@ -40,6 +49,10 @@ func (o *Tina) Start(config map[string]interface{}) error {
 }
 
 func (o *Tina) Stop() error {
+
+	o.tinaMutex.Lock()
+	defer o.tinaMutex.Unlock()
+
 	return nil
 }
 
@@ -63,15 +76,27 @@ func (o *Tina) initGateway(config map[string]interface{}) error {
 	return o.microroller.Start(config)
 }
 
-func (o *Tina) Deploy(guide TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) error {
+func (o *Tina) Deploy(guide *TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) (Future, error) {
+
+	if guide.Start == nil {
+		return fmt.Errorf("no start routine is set in tiny guide")
+	}
 
 	var tiny = &Tiny{}
 	tiny.id = uuid.NewV4().String()
 	tiny.group = uuid.NewV4().String()
+	tiny.flag = flag
+	tiny.config = config
+	tiny.options = options
+	tiny.guide = guide
 
-	go guide.Start(tiny, nil)
+	o.tinyMutex.Lock()
+	o.tinys[tiny.id] = tiny
+	o.tinyMutex.Unlock()
 
-	return nil
+	var future = &FutureImpl{}
+	go tiny.guide.Start(tiny, future)
+	return future, nil
 }
 
 func (o *Tina) Undeploy(deployId string) error {
