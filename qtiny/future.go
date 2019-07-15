@@ -36,11 +36,4 @@ type Future interface {
 	OnFinally(callback FutureCallback) Future
 
 	Then(callback FutureCallback) Future
-	ThenFuture(future Future) Future
-
-	Prev() Future
-	Next() Future
-
-	Run() Future
-	SetRoutine(routine FutureCallback) Future
 }

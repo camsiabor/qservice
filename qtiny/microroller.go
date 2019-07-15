@@ -180,7 +180,7 @@ func (o *Microroller) generateMessageId() uint64 {
 	return id
 }
 
-func (o *Microroller) Post(request *Message) (*Message, error) {
+func (o *Microroller) Post(request *Message) (response *Message, err error) {
 
 	if request.Timeout > 0 || request.Handler != nil {
 
@@ -200,7 +200,7 @@ func (o *Microroller) Post(request *Message) (*Message, error) {
 		}
 	}
 
-	var err = o.gateway.Post(request)
+	err = o.gateway.Post(request)
 	if err != nil {
 		return nil, err
 	}

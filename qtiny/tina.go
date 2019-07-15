@@ -2,6 +2,7 @@ package qtiny
 
 import (
 	"github.com/camsiabor/qcom/util"
+	"github.com/twinj/uuid"
 	"log"
 	"os"
 )
@@ -62,12 +63,19 @@ func (o *Tina) initGateway(config map[string]interface{}) error {
 	return o.microroller.Start(config)
 }
 
-func (o *Tina) Deploy(tiny Tiny) {
+func (o *Tina) Deploy(guide TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) error {
 
+	var tiny = &Tiny{}
+	tiny.id = uuid.NewV4().String()
+	tiny.group = uuid.NewV4().String()
+
+	go guide.Start(tiny, nil)
+
+	return nil
 }
 
-func (o *Tina) Undeploy(tiny Tiny) {
-
+func (o *Tina) Undeploy(deployId string) error {
+	return nil
 }
 
 func (o *Tina) SetGateway(gateway Gateway) *Tina {
