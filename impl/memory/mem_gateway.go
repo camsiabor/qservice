@@ -133,7 +133,7 @@ func (o *MGateway) Broadcast(message *qtiny.Message) error {
 	return o.Post(message)
 }
 
-func (o *MGateway) ServiceRemoteNew(address string) *qtiny.Nano {
+func (o *MGateway) NanoRemoteRegister(address string) *qtiny.Nano {
 	o.ConsumerMutex.Lock()
 	defer o.ConsumerMutex.Unlock()
 	if o.Consumers == nil {
@@ -148,7 +148,7 @@ func (o *MGateway) ServiceRemoteNew(address string) *qtiny.Nano {
 	return service
 }
 
-func (o *MGateway) ServiceRemoteGet(address string) *qtiny.Nano {
+func (o *MGateway) NanoRemoteGet(address string) *qtiny.Nano {
 	o.ConsumerMutex.RLock()
 	defer o.ConsumerMutex.RUnlock()
 	if o.Consumers == nil {
@@ -157,11 +157,11 @@ func (o *MGateway) ServiceRemoteGet(address string) *qtiny.Nano {
 	return o.Consumers[address]
 }
 
-func (o *MGateway) ServiceRegister(address string, options qtiny.NanoOptions) error {
+func (o *MGateway) NanoLocalRegister(address string, flag qtiny.NanoFlag, options qtiny.NanoOptions) error {
 	return nil
 }
 
-func (o *MGateway) ServiceUnregister(address string) error {
+func (o *MGateway) NanoLocalUnregister(address string) error {
 	return nil
 }
 

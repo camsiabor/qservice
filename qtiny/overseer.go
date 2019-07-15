@@ -139,7 +139,7 @@ func (o *Overseer) handleReply(response *Message) {
 
 }
 
-func (o *Overseer) ServiceRegister(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
+func (o *Overseer) NanoLocalRegister(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
@@ -155,18 +155,18 @@ func (o *Overseer) ServiceRegister(address string, flag NanoFlag, options NanoOp
 		current.LocalAdd(nano)
 	}
 
-	return o.gateway.ServiceRegister(address, flag, options)
+	return o.gateway.NanoLocalRegister(address, flag, options)
 
 }
 
-func (o *Overseer) ServiceUnregister(address string) error {
+func (o *Overseer) NanoLocalUnregister(address string) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
 	delete(o.services, address)
 
-	return o.gateway.ServiceUnregister(address)
+	return o.gateway.NanoLocalUnregister(address)
 }
 
 func (o *Overseer) generateMessageId() uint64 {

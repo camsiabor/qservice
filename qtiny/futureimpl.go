@@ -23,7 +23,20 @@ type FutureImpl struct {
 	onSucceed FutureCallback
 	onFinally FutureCallback
 
+	prev *FutureImpl
 	next *FutureImpl
+}
+
+func (o *FutureImpl) ThenFuture(future Future) Future {
+	panic("implement me")
+}
+
+func (o *FutureImpl) Prev() Future {
+	return o.prev
+}
+
+func (o *FutureImpl) Next() Future {
+	return o.next
 }
 
 func (o *FutureImpl) SetRoutine(routine FutureCallback) Future {
@@ -148,17 +161,17 @@ func (o *FutureImpl) forward() {
 
 	defer func() {
 		if o.onFinally != nil {
-			o.onFinally(FutureFinally, o)
+			o.onFinally(FutureEventFinally, o)
 		}
 	}()
 
 	if o.isSucceed {
 		if o.onSucceed != nil {
-			o.onSucceed(FutureSucceed, o)
+			o.onSucceed(FutureEventSucceed, o)
 		}
 	} else {
 		if o.onFail != nil {
-			o.onFail(FutureSucceed, o)
+			o.onFail(FutureEventSucceed, o)
 		}
 	}
 }
