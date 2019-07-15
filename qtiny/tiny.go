@@ -1,12 +1,12 @@
 package qtiny
 
 type TinyOptions map[string]interface{}
+type TinyFlag int
 
 type Tiny struct {
 	id    string
 	group string
-
-	tina *Tina
+	tina  *Tina
 }
 
 func (o *Tiny) GetTina() *Tina {
