@@ -45,7 +45,7 @@ type Message struct {
 
 	Handler MessageHandler
 
-	microroller *MicroRoller
+	microroller *Microroller
 
 	Related *Message
 }
@@ -82,7 +82,7 @@ func (o *Message) Error(code int, errmsg string) error {
 	return err
 }
 
-func (o *Message) Overseer() *MicroRoller {
+func (o *Message) Overseer() *Microroller {
 	return o.microroller
 }
 

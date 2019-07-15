@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 )
 
-type OverseerErrorHandler func(event string, err interface{}, microroller *MicroRoller)
+type OverseerErrorHandler func(event string, err interface{}, microroller *Microroller)
 
-type MicroRoller struct {
+type Microroller struct {
 	serial uint64
 
 	mutex sync.RWMutex
@@ -27,11 +27,11 @@ type MicroRoller struct {
 	ErrHandler OverseerErrorHandler
 }
 
-func (o *MicroRoller) Init(gateway Gateway, waitingLimit uint32) {
+func (o *Microroller) Init(gateway Gateway, waitingLimit uint32) {
 
 }
 
-func (o *MicroRoller) Start(config map[string]interface{}) error {
+func (o *Microroller) Start(config map[string]interface{}) error {
 
 	var requestsLimit = util.GetUInt64(config, 65536, "requests.limit")
 	o.requests = make([]*Message, requestsLimit)
@@ -61,7 +61,7 @@ func (o *MicroRoller) Start(config map[string]interface{}) error {
 	return nil
 }
 
-func (o *MicroRoller) Stop() error {
+func (o *Microroller) Stop() error {
 	if o.control != nil {
 		close(o.control)
 		o.control = nil
@@ -69,7 +69,7 @@ func (o *MicroRoller) Stop() error {
 	return nil
 }
 
-func (o *MicroRoller) loop() {
+func (o *Microroller) loop() {
 	var ok bool
 	var msg *Message
 
@@ -88,7 +88,7 @@ func (o *MicroRoller) loop() {
 	}
 }
 
-func (o *MicroRoller) dispatch(msg *Message) {
+func (o *Microroller) dispatch(msg *Message) {
 	defer func() {
 		var err = recover()
 		if err != nil && o.ErrHandler != nil {
@@ -108,7 +108,7 @@ func (o *MicroRoller) dispatch(msg *Message) {
 	}
 }
 
-func (o *MicroRoller) handleReply(response *Message) {
+func (o *Microroller) handleReply(response *Message) {
 	if response.ReplyId < 0 {
 		return
 	}
@@ -137,7 +137,7 @@ func (o *MicroRoller) handleReply(response *Message) {
 
 }
 
-func (o *MicroRoller) NanoLocalRegister(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
+func (o *Microroller) NanoLocalRegister(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
@@ -157,7 +157,7 @@ func (o *MicroRoller) NanoLocalRegister(address string, flag NanoFlag, options N
 
 }
 
-func (o *MicroRoller) NanoLocalUnregister(address string) error {
+func (o *Microroller) NanoLocalUnregister(address string) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
@@ -167,7 +167,7 @@ func (o *MicroRoller) NanoLocalUnregister(address string) error {
 	return o.gateway.NanoLocalUnregister(address)
 }
 
-func (o *MicroRoller) generateMessageId() uint64 {
+func (o *Microroller) generateMessageId() uint64 {
 	var id = atomic.AddUint64(&o.serial, 1)
 	if id >= o.requestsLimit {
 		o.mutex.Lock()
@@ -180,7 +180,7 @@ func (o *MicroRoller) generateMessageId() uint64 {
 	return id
 }
 
-func (o *MicroRoller) Post(request *Message) (*Message, error) {
+func (o *Microroller) Post(request *Message) (*Message, error) {
 
 	if request.Timeout > 0 || request.Handler != nil {
 
@@ -215,7 +215,7 @@ func (o *MicroRoller) Post(request *Message) (*Message, error) {
 	return request.Related, nil
 }
 
-func (o *MicroRoller) Broadcast(message *Message) error {
+func (o *Microroller) Broadcast(message *Message) error {
 	// TODO implement
 
 	message.Type = MessageTypeBroadcast
@@ -223,10 +223,10 @@ func (o *MicroRoller) Broadcast(message *Message) error {
 
 }
 
-func (o *MicroRoller) GetGateway() Gateway {
+func (o *Microroller) GetGateway() Gateway {
 	return o.gateway
 }
 
-func (o *MicroRoller) SetGateway(gateway Gateway) {
+func (o *Microroller) SetGateway(gateway Gateway) {
 	o.gateway = gateway
 }

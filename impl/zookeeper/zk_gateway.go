@@ -27,7 +27,7 @@ type ZGateway struct {
 }
 
 const PathNodeQueue = "/qnode"
-const PathService = "/qnano"
+const PathNano = "/qnano"
 const PathConnection = "/qconn"
 
 func (o *ZGateway) Init(config map[string]interface{}) error {
@@ -105,7 +105,7 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 			o.connectId = hostname + ":" + uuid.NewV4().String()
 		}
 
-		_, _ = watcher.Create(PathService, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		_, _ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
 
@@ -371,9 +371,9 @@ func (o *ZGateway) GetQueueZNodePath(nodeId string) string {
 }
 
 func (o *ZGateway) GetNanoZNodePath(address string) string {
-	return PathService + "/" + address
+	return PathNano + "/" + address
 }
 
 func (o *ZGateway) GetNanoZNodeSelfPath(address string) string {
-	return fmt.Sprintf("%s/%s/%s", PathService, address, o.GetId())
+	return fmt.Sprintf("%s/%s/%s", PathNano, address, o.GetId())
 }
