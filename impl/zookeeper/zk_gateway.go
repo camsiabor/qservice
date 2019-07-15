@@ -59,21 +59,21 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	return err
 }
 
-func (o *ZGateway) Start(config map[string]interface{}) error {
+func (o *ZGateway) Start(config map[string]interface{}, future qtiny.Future) error {
 	var err error
 	defer func() {
 		if err != nil {
-			_ = o.Stop(config)
+			_ = o.Stop(config, nil)
 		}
 	}()
-	err = o.MGateway.Start(config)
+	err = o.MGateway.Start(config, future)
 	if err == nil {
 		err = o.Init(config)
 	}
 	return err
 }
 
-func (o *ZGateway) Stop(config map[string]interface{}) error {
+func (o *ZGateway) Stop(config map[string]interface{}, future qtiny.Future) error {
 	if o.timer != nil {
 		o.timer.Stop()
 	}
@@ -192,6 +192,7 @@ func (o *ZGateway) publish(consumerAddress string, prefix string, data []byte) e
 }
 
 func (o *ZGateway) Post(message *qtiny.Message) error {
+
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
 	}
@@ -201,6 +202,12 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	}
 
 	message.Sender = o.GetId()
+
+	var subscriber = o.Subscribers[message.Address]
+	if subscriber != nil {
+		return o.MGateway.Post(message)
+	}
+
 	var data, err = message.ToJson()
 	if err != nil {
 		return err
@@ -211,7 +218,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	}
 
 	var service = o.ServiceRemoteGet(message.Address)
-	if service == nil || service.NodeAddresses() == nil {
+	if service == nil || service.RemoteAddresses() == nil {
 		service = o.ServiceRemoteNew(message.Address)
 		var serviceZNodePath = o.GetServiceZNodePath(message.Address)
 		var children, _, err = o.watcher.GetConn().Children(serviceZNodePath)
@@ -223,11 +230,11 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 			return fmt.Errorf("no consumer found for " + message.Address)
 		}
 		for i := 0; i < len(children); i++ {
-			service.NodeAdd(children[i], children[i])
+			service.RemoteAdd(children[i], children[i])
 		}
 	}
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
-		var consumerAddresses = service.NodeAddresses()
+		var consumerAddresses = service.RemoteAddresses()
 		for i := 0; i < len(consumerAddresses); i++ {
 			var consumerAddress = consumerAddresses[i]
 			var perr = o.publish(consumerAddress, "/b", data)
@@ -236,7 +243,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 			}
 		}
 	} else {
-		var consumerAddress = service.NodeAddress(-1)
+		var consumerAddress = service.RemoteAddress(-1)
 		err = o.publish(consumerAddress, "/p", data)
 	}
 	return err
@@ -247,7 +254,7 @@ func (o *ZGateway) Broadcast(message *qtiny.Message) error {
 	return o.Post(message)
 }
 
-func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.ServiceOptions) error {
+func (o *ZGateway) serviceCreateRegistry(address string, options qtiny.NanoOptions) error {
 	var parent = o.GetServiceZNodePath(address)
 	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
@@ -279,7 +286,7 @@ func (o *ZGateway) serviceCreateRegistries() {
 	}
 }
 
-func (o *ZGateway) ServiceRegister(address string, options qtiny.ServiceOptions) error {
+func (o *ZGateway) ServiceRegister(address string, flag qtiny.NanoFlag, options qtiny.NanoOptions) error {
 	o.SubscriberAdd(address, options)
 	if o.watcher.IsConnected() {
 		go o.serviceCreateRegistry(address, options)
@@ -312,7 +319,7 @@ func (o *ZGateway) serviceRegistryWatch(event *zk.Event, stat *zk.Stat, data int
 	if service == nil {
 		return true
 	}
-	service.NodeSet(children, nil)
+	service.RemoteSet(children, nil)
 	return true
 }
 

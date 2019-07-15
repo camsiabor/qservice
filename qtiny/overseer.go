@@ -24,7 +24,7 @@ type Overseer struct {
 	requests      []*Message
 	requestsLimit uint64
 
-	services map[string]*Service
+	services map[string]*Nano
 
 	ErrHandler OverseerErrorHandler
 }
@@ -39,7 +39,7 @@ func (o *Overseer) Start(config map[string]interface{}) error {
 	o.requests = make([]*Message, requestsLimit)
 
 	if o.services == nil {
-		o.services = make(map[string]*Service)
+		o.services = make(map[string]*Nano)
 	}
 
 	if o.gateway == nil {
@@ -139,22 +139,23 @@ func (o *Overseer) handleReply(response *Message) {
 
 }
 
-func (o *Overseer) ServiceRegister(address string, options ServiceOptions, handler ServiceHandler) error {
+func (o *Overseer) ServiceRegister(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	var service = &Service{}
-	service.Address = address
-	service.Handler = handler
+	var nano = &Nano{}
+	nano.Address = address
+	nano.Handler = handler
 
 	var current = o.services[address]
 	if current == nil {
-		o.services[address] = service
+		o.services[address] = nano
 	} else {
-		current.AddSibling(service)
+		current.LocalAdd(nano)
 	}
-	return o.gateway.ServiceRegister(address, options)
+
+	return o.gateway.ServiceRegister(address, flag, options)
 
 }
 

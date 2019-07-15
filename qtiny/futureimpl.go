@@ -18,11 +18,22 @@ type FutureImpl struct {
 
 	context interface{}
 
+	routine   FutureCallback
 	onFail    FutureCallback
 	onSucceed FutureCallback
 	onFinally FutureCallback
 
 	next *FutureImpl
+}
+
+func (o *FutureImpl) SetRoutine(routine FutureCallback) Future {
+	o.routine = routine
+	return o
+}
+
+func (o *FutureImpl) Run() Future {
+
+	return o
 }
 
 func (o *FutureImpl) IsFail() bool {
@@ -139,7 +150,7 @@ func (o *FutureImpl) forward() {
 		if o.onFinally != nil {
 			o.onFinally(FutureFinally, o)
 		}
-	}
+	}()
 
 	if o.isSucceed {
 		if o.onSucceed != nil {

@@ -38,4 +38,5 @@ type Future interface {
 	Then(callback FutureCallback) Future
 
 	Run() Future
+	SetRoutine(routine FutureCallback) Future
 }

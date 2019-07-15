@@ -11,7 +11,7 @@ type Gateway interface {
 	Post(message *Message) error
 	Broadcast(message *Message) error
 
-	ServiceRegister(address string, options ServiceOptions) error
+	ServiceRegister(address string, flag NanoFlag, options NanoOptions) error
 	ServiceUnregister(address string) error
 
 	GetLogger() *log.Logger
