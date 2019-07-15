@@ -2,15 +2,21 @@ package qtiny
 
 type TinyOptions map[string]interface{}
 
-type Tiny interface {
-	LifeCycler
+type Tiny struct {
+	id    string
+	group string
 
-	Next() Tiny
-	Prev() Tiny
+	tina *Tina
+}
 
-	GetGroup() string
-	SetGroup(string) Tiny
+func (o *Tiny) GetTina() *Tina {
+	return o.tina
+}
 
-	GetGateway() Gateway
-	GetOverseer() *Overseer
+func (o *Tiny) GetId() string {
+	return o.id
+}
+
+func (o *Tiny) GetGroup() string {
+	return o.group
 }

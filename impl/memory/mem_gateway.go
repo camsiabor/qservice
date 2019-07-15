@@ -30,7 +30,7 @@ type MGateway struct {
 	Subscribers     map[string]*qtiny.Nano
 }
 
-func (o *MGateway) Start(config map[string]interface{}, future qtiny.Future) error {
+func (o *MGateway) Start(config map[string]interface{}) error {
 
 	var configId = util.GetStr(config, "", "id")
 	if len(configId) > 0 {

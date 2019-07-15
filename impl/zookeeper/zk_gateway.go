@@ -27,7 +27,7 @@ type ZGateway struct {
 }
 
 const PathNodeQueue = "/qnode"
-const PathService = "/qservice"
+const PathService = "/qnano"
 const PathConnection = "/qconn"
 
 func (o *ZGateway) Init(config map[string]interface{}) error {
@@ -59,21 +59,21 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	return err
 }
 
-func (o *ZGateway) Start(config map[string]interface{}, future qtiny.Future) error {
+func (o *ZGateway) Start(config map[string]interface{}) error {
 	var err error
 	defer func() {
 		if err != nil {
-			_ = o.Stop(config, nil)
+			_ = o.Stop(config)
 		}
 	}()
-	err = o.MGateway.Start(config, future)
+	err = o.MGateway.Start(config)
 	if err == nil {
 		err = o.Init(config)
 	}
 	return err
 }
 
-func (o *ZGateway) Stop(config map[string]interface{}, future qtiny.Future) error {
+func (o *ZGateway) Stop(config map[string]interface{}) error {
 	if o.timer != nil {
 		o.timer.Stop()
 	}
@@ -217,24 +217,24 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 		return o.publish(message.Address, "/r", data)
 	}
 
-	var service = o.NanoRemoteGet(message.Address)
-	if service == nil || service.RemoteAddresses() == nil {
-		service = o.NanoRemoteRegister(message.Address)
-		var serviceZNodePath = o.GetNanoZNodePath(message.Address)
-		var children, _, err = o.watcher.GetConn().Children(serviceZNodePath)
+	var nano = o.NanoRemoteGet(message.Address)
+	if nano == nil || nano.RemoteAddresses() == nil {
+		nano = o.NanoRemoteRegister(message.Address)
+		var nanoZNodePath = o.GetNanoZNodePath(message.Address)
+		var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
 		if err != nil {
 			return fmt.Errorf("no consumer found : " + err.Error())
 		}
-		o.watcher.Watch(WatchTypeChildren, serviceZNodePath, serviceZNodePath, o.nanoRemoteRegistryWatch)
+		o.watcher.Watch(WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
 		if children == nil || len(children) == 0 {
 			return fmt.Errorf("no consumer found for " + message.Address)
 		}
 		for i := 0; i < len(children); i++ {
-			service.RemoteAdd(children[i], children[i])
+			nano.RemoteAdd(children[i], children[i])
 		}
 	}
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
-		var consumerAddresses = service.RemoteAddresses()
+		var consumerAddresses = nano.RemoteAddresses()
 		for i := 0; i < len(consumerAddresses); i++ {
 			var consumerAddress = consumerAddresses[i]
 			var perr = o.publish(consumerAddress, "/b", data)
@@ -243,7 +243,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 			}
 		}
 	} else {
-		var consumerAddress = service.RemoteAddress(-1)
+		var consumerAddress = nano.RemoteAddress(-1)
 		err = o.publish(consumerAddress, "/p", data)
 	}
 	return err
@@ -259,7 +259,7 @@ func (o *ZGateway) nanoLocalPublishRegistry(address string, options qtiny.NanoOp
 	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		if o.Logger != nil {
-			o.Logger.Println("service register fail ", parent, " : ", err.Error())
+			o.Logger.Println("nano register fail ", parent, " : ", err.Error())
 		}
 		return err
 	}
@@ -267,9 +267,9 @@ func (o *ZGateway) nanoLocalPublishRegistry(address string, options qtiny.NanoOp
 	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 	if !exist && o.Logger != nil {
 		if cerr == nil {
-			o.Logger.Println("service register ", path)
+			o.Logger.Println("nano register ", path)
 		} else {
-			o.Logger.Println("service register fail ", path, " : ", cerr.Error())
+			o.Logger.Println("nano register fail ", path, " : ", cerr.Error())
 		}
 	}
 	return cerr
@@ -306,7 +306,7 @@ func (o *ZGateway) NanoLocalUnregister(address string) error {
 
 func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
 	if err != nil && o.Logger != nil {
-		o.Logger.Println("service registry watch error", err.Error())
+		o.Logger.Println("nano registry watch error", err.Error())
 		return true
 	}
 	if data == nil {
@@ -320,11 +320,11 @@ func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 		return true
 	}
 	var address = box.path
-	var service = o.NanoRemoteGet(address)
-	if service == nil {
+	var nano = o.NanoRemoteGet(address)
+	if nano == nil {
 		return true
 	}
-	service.RemoteSet(children, nil)
+	nano.RemoteSet(children, nil)
 	return true
 }
 

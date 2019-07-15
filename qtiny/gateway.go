@@ -3,9 +3,10 @@ package qtiny
 import "log"
 
 type Gateway interface {
-	LifeCycler
-
 	GetId() string
+
+	Start(config map[string]interface{}) error
+	Stop(config map[string]interface{}) error
 
 	Poll(limit int) (chan *Message, error)
 	Post(message *Message) error

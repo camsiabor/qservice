@@ -45,7 +45,7 @@ type Message struct {
 
 	Handler MessageHandler
 
-	overseer *Overseer
+	microroller *MicroRoller
 
 	Related *Message
 }
@@ -66,7 +66,7 @@ func (o *Message) Reply(code int, data interface{}) error {
 	o.Type = MessageTypeReply
 	o.ReplyCode = code
 	o.ReplyData = data
-	_, err := o.overseer.Post(o)
+	_, err := o.microroller.Post(o)
 	return err
 }
 
@@ -78,12 +78,12 @@ func (o *Message) Error(code int, errmsg string) error {
 	o.Type = MessageTypeReply | MessageTypeFail
 	o.ReplyCode = code
 	o.ReplyErr = errmsg
-	_, err := o.overseer.Post(o)
+	_, err := o.microroller.Post(o)
 	return err
 }
 
-func (o *Message) Overseer() *Overseer {
-	return o.overseer
+func (o *Message) Overseer() *MicroRoller {
+	return o.microroller
 }
 
 func (o *Message) SetTimeout(timeout time.Duration) *Message {
