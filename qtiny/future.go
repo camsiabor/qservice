@@ -3,10 +3,10 @@ package qtiny
 type FutureEvent int
 
 const (
-	FutureRoutine FutureEvent = 0
-	FutureSucceed FutureEvent = 1
-	FutureFail    FutureEvent = 2
-	FutureFinally FutureEvent = 3
+	FutureEventRoutine FutureEvent = 0
+	FutureEventSucceed FutureEvent = 1
+	FutureEventFail    FutureEvent = 2
+	FutureEventFinally FutureEvent = 3
 )
 
 type FutureCallback func(event FutureEvent, future Future) int
@@ -36,6 +36,10 @@ type Future interface {
 	OnFinally(callback FutureCallback) Future
 
 	Then(callback FutureCallback) Future
+	ThenFuture(future Future) Future
+
+	Prev() Future
+	Next() Future
 
 	Run() Future
 }

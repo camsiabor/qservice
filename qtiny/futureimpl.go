@@ -1,8 +1,8 @@
 package qtiny
 
 import (
-	"bitbucket.org/avd/go-ipc/sync"
 	"fmt"
+	"sync"
 )
 
 type FutureImpl struct {
@@ -18,11 +18,31 @@ type FutureImpl struct {
 
 	context interface{}
 
+	routine FutureCallback
+
 	onFail    FutureCallback
 	onSucceed FutureCallback
 	onFinally FutureCallback
 
+	prev *FutureImpl
 	next *FutureImpl
+}
+
+func (o *FutureImpl) ThenFuture(future Future) Future {
+	panic("implement me")
+}
+
+func (o *FutureImpl) Prev() Future {
+	panic("implement me")
+}
+
+func (o *FutureImpl) Next() Future {
+	panic("implement me")
+}
+
+func (o *FutureImpl) Run() Future {
+	o.routine(FutureEventRoutine, o)
+	return o
 }
 
 func (o *FutureImpl) IsFail() bool {
@@ -137,17 +157,17 @@ func (o *FutureImpl) forward() {
 
 	defer func() {
 		if o.onFinally != nil {
-			o.onFinally(FutureFinally, o)
+			o.onFinally(FutureEventFinally, o)
 		}
-	}
+	}()
 
 	if o.isSucceed {
 		if o.onSucceed != nil {
-			o.onSucceed(FutureSucceed, o)
+			o.onSucceed(FutureEventSucceed, o)
 		}
 	} else {
 		if o.onFail != nil {
-			o.onFail(FutureSucceed, o)
+			o.onFail(FutureEventSucceed, o)
 		}
 	}
 }
