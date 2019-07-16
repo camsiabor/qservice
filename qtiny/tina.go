@@ -1,12 +1,11 @@
 package qtiny
 
 import (
-	"bitbucket.org/avd/go-ipc/sync"
-	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"log"
 	"os"
+	"sync"
 )
 
 var tina = &Tina{}
@@ -33,6 +32,10 @@ func (o *Tina) Start(config map[string]interface{}) error {
 
 	o.tinaMutex.Lock()
 	defer o.tinaMutex.Unlock()
+
+	if o.tinys == nil {
+		o.tinys = make(map[string]*Tiny)
+	}
 
 	o.config = config
 	if o.config == nil {
@@ -67,40 +70,71 @@ func (o *Tina) initLogger(map[string]interface{}) error {
 
 func (o *Tina) initGateway(config map[string]interface{}) error {
 
-	// default zookeeper gateway presently
-	o.gateway.SetLogger(o.logger)
+	if o.gateway == nil {
+		panic("gateway is not set yet")
+	}
+
+	if o.gateway.GetLogger() == nil {
+		o.gateway.SetLogger(o.logger)
+	}
 	if err := o.gateway.Start(config); err != nil {
 		return err
+	}
+	if o.microroller == nil {
+		o.microroller = &Microroller{}
+	}
+	if o.microroller.GetLogger() == nil {
+		o.microroller.SetLogger(o.logger)
 	}
 	o.microroller.SetGateway(o.gateway)
 	return o.microroller.Start(config)
 }
 
-func (o *Tina) Deploy(guide *TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) (Future, error) {
+func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) (Future, error) {
+
+	var future = &FutureImpl{}
 
 	if guide.Start == nil {
-		return fmt.Errorf("no start routine is set in tiny guide")
+		_ = future.Fail(0, "no start routine is set in tiny guide")
+		return future, util.AsError(future.errCause)
+	}
+
+	o.tinyMutex.RLock()
+	var current = o.tinys[id]
+	o.tinyMutex.RUnlock()
+
+	if current != nil {
+		_ = future.Fail(0, "already deployed a tiny with id : "+id)
+		return nil, util.AsError(future.errCause)
+	}
+
+	if len(id) == 0 {
+		id = uuid.NewV4().String()
 	}
 
 	var tiny = &Tiny{}
 	tiny.id = uuid.NewV4().String()
-	tiny.group = uuid.NewV4().String()
 	tiny.flag = flag
 	tiny.config = config
 	tiny.options = options
 	tiny.guide = guide
+	tiny.tina = o
 
 	o.tinyMutex.Lock()
 	o.tinys[tiny.id] = tiny
 	o.tinyMutex.Unlock()
 
-	var future = &FutureImpl{}
-	go tiny.guide.Start(tiny, future)
+	if flag&TinyFlagDeploySync > 0 {
+		tiny.guide.Start(tiny, future)
+	} else {
+		go tiny.guide.Start(tiny, future)
+	}
+
 	return future, nil
 }
 
-func (o *Tina) Undeploy(deployId string) error {
-	return nil
+func (o *Tina) Undeploy(id string) (Future, error) {
+	return nil, nil
 }
 
 func (o *Tina) SetGateway(gateway Gateway) *Tina {

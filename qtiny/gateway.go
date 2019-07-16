@@ -12,7 +12,7 @@ type Gateway interface {
 	Post(message *Message) error
 	Broadcast(message *Message) error
 
-	NanoLocalRegister(address string, flag NanoFlag, options NanoOptions) error
+	NanoLocalRegister(nano *Nano) error
 	NanoLocalUnregister(address string) error
 
 	GetLogger() *log.Logger

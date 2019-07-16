@@ -3,6 +3,7 @@ package qtiny
 import (
 	"fmt"
 	"github.com/camsiabor/qcom/util"
+	"log"
 	"sync"
 	"sync/atomic"
 )
@@ -23,6 +24,8 @@ type Microroller struct {
 	requestsLimit uint64
 
 	nanos map[string]*Nano
+
+	logger *log.Logger
 
 	ErrHandler OverseerErrorHandler
 }
@@ -137,23 +140,31 @@ func (o *Microroller) handleReply(response *Message) {
 
 }
 
-func (o *Microroller) NanoLocalRegister(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
+func (o *Microroller) NanoLocalRegister(nano *Nano) error {
+
+	if nano == nil {
+		return fmt.Errorf("nano is nil")
+	}
+
+	if len(nano.Address) == 0 {
+		return fmt.Errorf("nano address is not set")
+	}
+
+	if nano.Handler == nil {
+		return fmt.Errorf("nano handler is not set")
+	}
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	var nano = &Nano{}
-	nano.Address = address
-	nano.Handler = handler
-
-	var current = o.nanos[address]
+	var current = o.nanos[nano.Address]
 	if current == nil {
-		o.nanos[address] = nano
+		o.nanos[nano.Address] = nano
 	} else {
 		current.LocalAdd(nano)
 	}
 
-	return o.gateway.NanoLocalRegister(address, flag, options)
+	return o.gateway.NanoLocalRegister(nano)
 
 }
 
@@ -227,6 +238,16 @@ func (o *Microroller) GetGateway() Gateway {
 	return o.gateway
 }
 
-func (o *Microroller) SetGateway(gateway Gateway) {
+func (o *Microroller) SetGateway(gateway Gateway) *Microroller {
 	o.gateway = gateway
+	return o
+}
+
+func (o *Microroller) GetLogger() *log.Logger {
+	return o.logger
+}
+
+func (o *Microroller) SetLogger(logger *log.Logger) *Microroller {
+	o.logger = logger
+	return o
 }

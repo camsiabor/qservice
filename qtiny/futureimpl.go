@@ -1,8 +1,8 @@
 package qtiny
 
 import (
-	"bitbucket.org/avd/go-ipc/sync"
 	"fmt"
+	"sync"
 )
 
 type FutureImpl struct {

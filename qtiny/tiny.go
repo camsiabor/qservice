@@ -1,12 +1,16 @@
 package qtiny
 
 import (
-	"bitbucket.org/avd/go-ipc/sync"
 	"github.com/camsiabor/qcom/util"
+	"sync"
 )
 
 type TinyOptions map[string]interface{}
 type TinyFlag int
+
+const (
+	TinyFlagDeploySync TinyFlag = 0x1000
+)
 
 type TinyKind interface {
 	util.LazyDataKind
@@ -15,13 +19,14 @@ type TinyKind interface {
 	GetGroup() string
 	GetOptions() TinyOptions
 	GetConfig() map[string]interface{}
+	GetTina() *Tina
 	Post(request *Message) (response *Message, err error)
-	Register(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error
+	NanoLocalRegister(nano *Nano) error
 }
 
 type TinyGuide struct {
-	Start func(tiny TinyKind, future Future) error
-	Stop  func(tiny TinyKind, future Future) error
+	Start func(tiny TinyKind, future Future)
+	Stop  func(tiny TinyKind, future Future)
 	Err   func(tiny TinyKind, err error)
 }
 
@@ -64,6 +69,6 @@ func (o *Tiny) Post(request *Message) (*Message, error) {
 	return o.tina.microroller.Post(request)
 }
 
-func (o *Tiny) Register(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) error {
-	return o.tina.microroller.NanoLocalRegister(address, flag, options, handler)
+func (o *Tiny) NanoLocalRegister(nano *Nano) error {
+	return o.tina.microroller.NanoLocalRegister(nano)
 }

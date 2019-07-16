@@ -157,7 +157,7 @@ func (o *MGateway) NanoRemoteGet(address string) *qtiny.Nano {
 	return o.Consumers[address]
 }
 
-func (o *MGateway) NanoLocalRegister(address string, flag qtiny.NanoFlag, options qtiny.NanoOptions) error {
+func (o *MGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
@@ -167,19 +167,19 @@ func (o *MGateway) NanoLocalUnregister(address string) error {
 
 /* ====================================== subscribers ===================================== */
 
-func (o *MGateway) SubscriberAdd(address string, options qtiny.NanoOptions) {
+func (o *MGateway) SubscriberAdd(nano *qtiny.Nano) {
 	o.SubscriberMutex.Lock()
 	defer o.SubscriberMutex.Unlock()
 	if o.Subscribers == nil {
 		o.Subscribers = make(map[string]*qtiny.Nano)
 	}
 
-	var subscriber = o.Subscribers[address]
+	var subscriber = o.Subscribers[nano.Address]
 	if subscriber == nil {
 		subscriber = &qtiny.Nano{}
-		subscriber.Address = address
-		subscriber.Options = options
-		o.Subscribers[address] = subscriber
+		subscriber.Address = nano.Address
+		subscriber.Options = nano.Options
+		o.Subscribers[nano.Address] = subscriber
 	}
 }
 

@@ -260,8 +260,8 @@ func (o *ZGateway) Broadcast(message *qtiny.Message) error {
 	return o.Post(message)
 }
 
-func (o *ZGateway) nanoLocalPublishRegistry(address string, options qtiny.NanoOptions) error {
-	var parent = o.GetNanoZNodePath(address)
+func (o *ZGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
+	var parent = o.GetNanoZNodePath(nano.Address)
 	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		if o.Logger != nil {
@@ -269,7 +269,7 @@ func (o *ZGateway) nanoLocalPublishRegistry(address string, options qtiny.NanoOp
 		}
 		return err
 	}
-	var path = o.GetNanoZNodeSelfPath(address)
+	var path = o.GetNanoZNodeSelfPath(nano.Address)
 	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 	if !exist && o.Logger != nil {
 		if cerr == nil {
@@ -288,19 +288,19 @@ func (o *ZGateway) nanoLocalPublishRegistries() {
 	o.SubscriberMutex.RLock()
 	defer o.SubscriberMutex.RUnlock()
 	for _, subscriber := range o.Subscribers {
-		go o.nanoLocalPublishRegistry(subscriber.Address, subscriber.Options)
+		go o.nanoLocalPublishRegistry(subscriber)
 	}
 }
 
-func (o *ZGateway) NanoLocalRegister(address string, flag qtiny.NanoFlag, options qtiny.NanoOptions) error {
+func (o *ZGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 
-	if flag&qtiny.NanoFlagLocalOnly > 0 {
-		return o.MGateway.NanoLocalRegister(address, flag, options)
+	if nano.Flag&qtiny.NanoFlagLocalOnly > 0 {
+		return o.MGateway.NanoLocalRegister(nano)
 	}
 
-	o.SubscriberAdd(address, options)
+	o.SubscriberAdd(nano)
 	if o.watcher.IsConnected() {
-		go o.nanoLocalPublishRegistry(address, options)
+		go o.nanoLocalPublishRegistry(nano)
 	}
 	return nil
 }

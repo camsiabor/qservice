@@ -1,16 +1,21 @@
 package qtiny
 
 import (
+	"github.com/camsiabor/qcom/util"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 )
 
-type NanoHandler func(message *Message)
-
-type NanoOptions map[string]interface{}
-
 type NanoFlag int
+type NanoEvent int
+type NanoOptions map[string]interface{}
+type NanoHandler func(message *Message)
+type NanoCallback func(event NanoEvent, nano *Nano, context interface{})
+
+const (
+	NanoEventStop = 0x0010
+)
 
 const (
 	NanoFlagLocalOnly NanoFlag = 1
@@ -25,23 +30,34 @@ type Nano struct {
 
 	Flag NanoFlag
 
-	Locals     []*Nano
-	LocalAlpha *Nano
-	LocalMutex sync.RWMutex
+	locals     []*Nano
+	localAlpha *Nano
+	localMutex sync.RWMutex
 
-	RemoteMutex sync.RWMutex
-	RemoteIndex int32
-	RemoteCount int
-	RemoteArray []string
-	RemoteMap   map[string]interface{}
+	remoteMutex sync.RWMutex
+	remoteIndex int32
+	remoteCount int
+	remoteArray []string
+	remoteMap   map[string]interface{}
+
+	callbacks []NanoCallback
+}
+
+func NewNano(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) *Nano {
+	var nano = &Nano{}
+	nano.Address = address
+	nano.Flag = flag
+	nano.Options = options
+	nano.Handler = handler
+	return nano
 }
 
 /* ====================================== handling ==================================== */
 
 func (o *Nano) Handle(message *Message) {
 	if message.Type&MessageTypeBroadcast > 0 {
-		for i := 0; i < len(o.Locals); i++ {
-			o.Locals[i].Handler(message)
+		for i := 0; i < len(o.locals); i++ {
+			o.locals[i].Handler(message)
 		}
 		return
 	}
@@ -52,31 +68,31 @@ func (o *Nano) Handle(message *Message) {
 /* ====================================== siblings ==================================== */
 
 func (o *Nano) LocalAdd(silbing *Nano) {
-	o.LocalMutex.Lock()
-	defer o.LocalMutex.Unlock()
-	if o.Locals == nil {
-		o.Locals = []*Nano{o, silbing}
+	o.localMutex.Lock()
+	defer o.localMutex.Unlock()
+	if o.locals == nil {
+		o.locals = []*Nano{o, silbing}
 	} else {
-		o.Locals = append(o.Locals, silbing)
+		o.locals = append(o.locals, silbing)
 	}
-	silbing.LocalAlpha = o
+	silbing.localAlpha = o
 }
 
 func (o *Nano) LocalGet(index int) *Nano {
-	if o.Locals == nil {
+	if o.locals == nil {
 		return o
 	}
 	if index < 0 {
-		index = rand.Intn(len(o.Locals))
+		index = rand.Intn(len(o.locals))
 	}
-	return o.Locals[index]
+	return o.locals[index]
 }
 
 /* ====================================== remote consumers ==================================== */
 
 func (o *Nano) RemoteSet(address []string, data []interface{}) {
-	o.RemoteMutex.Lock()
-	defer o.RemoteMutex.Unlock()
+	o.remoteMutex.Lock()
+	defer o.remoteMutex.Unlock()
 
 	var m = make(map[string]interface{})
 	for i := range address {
@@ -92,40 +108,40 @@ func (o *Nano) RemoteSet(address []string, data []interface{}) {
 		}
 		m[oneaddr] = onedata
 	}
-	o.RemoteMap = m
-	o.RemoteArray = address
+	o.remoteMap = m
+	o.remoteArray = address
 }
 
 func (o *Nano) RemoteAdd(address string, data interface{}) {
-	o.RemoteMutex.Lock()
-	defer o.RemoteMutex.Unlock()
+	o.remoteMutex.Lock()
+	defer o.remoteMutex.Unlock()
 
-	if o.RemoteArray == nil {
-		o.RemoteArray = []string{address}
+	if o.remoteArray == nil {
+		o.remoteArray = []string{address}
 	} else {
-		for i := 0; i < o.RemoteCount; i++ {
-			if address == o.RemoteArray[i] {
+		for i := 0; i < o.remoteCount; i++ {
+			if address == o.remoteArray[i] {
 				return
 			}
 		}
-		o.RemoteArray = append(o.RemoteArray, address)
+		o.remoteArray = append(o.remoteArray, address)
 	}
-	if o.RemoteMap == nil {
-		o.RemoteMap = make(map[string]interface{})
+	if o.remoteMap == nil {
+		o.remoteMap = make(map[string]interface{})
 	}
-	o.RemoteMap[address] = data
-	o.RemoteCount = o.RemoteCount + 1
+	o.remoteMap[address] = data
+	o.remoteCount = o.remoteCount + 1
 }
 
 func (o *Nano) RemoteRemove(address string) {
-	o.RemoteMutex.Lock()
-	defer o.RemoteMutex.Unlock()
-	if o.RemoteArray == nil {
+	o.remoteMutex.Lock()
+	defer o.remoteMutex.Unlock()
+	if o.remoteArray == nil {
 		return
 	}
 	var index = -1
-	for i := 0; i < o.RemoteCount; i++ {
-		if o.RemoteArray[i] == address {
+	for i := 0; i < o.remoteCount; i++ {
+		if o.remoteArray[i] == address {
 			index = i
 			break
 		}
@@ -134,43 +150,81 @@ func (o *Nano) RemoteRemove(address string) {
 		return
 	}
 	var novaIndex = 0
-	var nova = make([]string, o.RemoteCount-1)
-	for i := 0; i < o.RemoteCount; i++ {
+	var nova = make([]string, o.remoteCount-1)
+	for i := 0; i < o.remoteCount; i++ {
 		if i != index {
-			nova[novaIndex] = o.RemoteArray[i]
+			nova[novaIndex] = o.remoteArray[i]
 			novaIndex = novaIndex + 1
 		}
 	}
-	o.RemoteArray = nova
+	o.remoteArray = nova
 
-	if o.RemoteMap != nil {
-		delete(o.RemoteMap, address)
+	if o.remoteMap != nil {
+		delete(o.remoteMap, address)
 	}
-	o.RemoteCount = o.RemoteCount - 1
+	o.remoteCount = o.remoteCount - 1
 }
 
 func (o *Nano) RemoteAddresses() []string {
-	return o.RemoteArray
+	return o.remoteArray
 }
 
 func (o *Nano) RemoteAddress(index int32) string {
-	if o.RemoteArray == nil {
+	if o.remoteArray == nil {
 		return ""
 	}
-	if index < 0 || int(index) >= o.RemoteCount {
-		index = o.RemoteIndex
-		if int(atomic.AddInt32(&o.RemoteIndex, 1)) >= o.RemoteCount {
-			o.RemoteIndex = 0
+	if index < 0 || int(index) >= o.remoteCount {
+		index = o.remoteIndex
+		if int(atomic.AddInt32(&o.remoteIndex, 1)) >= o.remoteCount {
+			o.remoteIndex = 0
 		}
 	}
-	return o.RemoteArray[index]
+	return o.remoteArray[index]
 }
 
 func (o *Nano) RemoteGetData(address string) interface{} {
-	o.RemoteMutex.RLock()
-	defer o.RemoteMutex.RUnlock()
-	if o.RemoteMap == nil {
+	o.remoteMutex.RLock()
+	defer o.remoteMutex.RUnlock()
+	if o.remoteMap == nil {
 		return nil
 	}
-	return o.RemoteMap[address]
+	return o.remoteMap[address]
+}
+
+/* ======================= callback ====================== */
+
+func (o *Nano) CallbackAdd(callback NanoCallback) *Nano {
+	if callback == nil {
+		return o
+	}
+	o.localMutex.Lock()
+	defer o.localMutex.Unlock()
+	if o.callbacks == nil {
+		o.callbacks = []NanoCallback{callback}
+	} else {
+		o.callbacks = append(o.callbacks, callback)
+	}
+	return o
+}
+
+func (o *Nano) CallbackInvoke(event NanoEvent, context interface{}, dopanic bool) (err error) {
+	if o.callbacks == nil {
+		return nil
+	}
+	for _, callback := range o.callbacks {
+		func() {
+			defer func() {
+				var pan = recover()
+				if pan != nil {
+					if dopanic {
+						panic(pan)
+					} else {
+						err = util.AsError(pan)
+					}
+				}
+			}()
+			callback(event, o, context)
+		}()
+	}
+	return err
 }
