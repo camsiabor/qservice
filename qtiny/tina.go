@@ -113,7 +113,7 @@ func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}
 	}
 
 	var tiny = &Tiny{}
-	tiny.id = uuid.NewV4().String()
+	tiny.id = id
 	tiny.flag = flag
 	tiny.config = config
 	tiny.options = options

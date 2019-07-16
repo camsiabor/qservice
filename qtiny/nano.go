@@ -2,6 +2,7 @@ package qtiny
 
 import (
 	"github.com/camsiabor/qcom/util"
+	"github.com/twinj/uuid"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,7 @@ const (
 )
 
 type Nano struct {
-	TinyGroup string
+	Id string
 
 	Address string
 	Options NanoOptions
@@ -45,6 +46,7 @@ type Nano struct {
 
 func NewNano(address string, flag NanoFlag, options NanoOptions, handler NanoHandler) *Nano {
 	var nano = &Nano{}
+	nano.Id = uuid.NewV4().String()
 	nano.Address = address
 	nano.Flag = flag
 	nano.Options = options
@@ -78,6 +80,40 @@ func (o *Nano) LocalAdd(silbing *Nano) {
 	silbing.localAlpha = o
 }
 
+func (o *Nano) LocalRemove(id string) error {
+	if o.locals == nil {
+		return nil
+	}
+	o.localMutex.Lock()
+	defer o.localMutex.Unlock()
+	var index = -1
+	for i := range o.locals {
+		if o.locals[i].Id == id {
+			index = i
+		}
+	}
+
+	if index < 0 {
+		return nil
+	}
+
+	if len(o.locals) == 1 {
+		o.locals = nil
+		return nil
+	}
+
+	var c = 0
+	var localsNew = make([]*Nano, len(o.locals)-1)
+	for i := range o.locals {
+		if i != index {
+			localsNew[c] = o.locals[i]
+			c++
+		}
+	}
+	o.locals = localsNew
+	return nil
+}
+
 func (o *Nano) LocalGet(index int) *Nano {
 	if o.locals == nil {
 		return o
@@ -86,6 +122,10 @@ func (o *Nano) LocalGet(index int) *Nano {
 		index = rand.Intn(len(o.locals))
 	}
 	return o.locals[index]
+}
+
+func (o *Nano) LocalAll() []*Nano {
+	return o.locals
 }
 
 /* ====================================== remote consumers ==================================== */

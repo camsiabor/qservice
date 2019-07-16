@@ -3,6 +3,7 @@ package qtiny
 import (
 	"fmt"
 	"github.com/camsiabor/qcom/util"
+	"github.com/twinj/uuid"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -23,18 +24,18 @@ type Microroller struct {
 	requests      []*Message
 	requestsLimit uint64
 
-	nanos map[string]*Nano
+	nanoMutex sync.RWMutex
+	nanos     map[string]*Nano
 
 	logger *log.Logger
 
 	ErrHandler OverseerErrorHandler
 }
 
-func (o *Microroller) Init(gateway Gateway, waitingLimit uint32) {
-
-}
-
 func (o *Microroller) Start(config map[string]interface{}) error {
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
 	var requestsLimit = util.GetUInt64(config, 65536, "requests.limit")
 	o.requests = make([]*Message, requestsLimit)
@@ -65,6 +66,9 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 }
 
 func (o *Microroller) Stop() error {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.control != nil {
 		close(o.control)
 		o.control = nil
@@ -154,28 +158,51 @@ func (o *Microroller) NanoLocalRegister(nano *Nano) error {
 		return fmt.Errorf("nano handler is not set")
 	}
 
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	var current = o.nanos[nano.Address]
-	if current == nil {
-		o.nanos[nano.Address] = nano
-	} else {
-		current.LocalAdd(nano)
+	if len(nano.Id) == 0 {
+		nano.Id = uuid.NewV4().String()
 	}
+
+	func() {
+		o.nanoMutex.Lock()
+		defer o.nanoMutex.Unlock()
+		var group = o.nanos[nano.Address]
+		if group == nil {
+			o.nanos[nano.Address] = nano
+		} else {
+			group.LocalAdd(nano)
+		}
+	}()
 
 	return o.gateway.NanoLocalRegister(nano)
 
 }
 
-func (o *Microroller) NanoLocalUnregister(address string) error {
+func (o *Microroller) NanoLocalUnregister(nano *Nano) error {
 
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
+	var err = func() error {
+		o.nanoMutex.Lock()
+		defer o.nanoMutex.Unlock()
 
-	delete(o.nanos, address)
+		var group = o.nanos[nano.Address]
+		if group == nil {
+			return nil
+		}
+		var err = group.LocalRemove(nano.Id)
+		if err != nil {
+			return err
+		}
+		var locals = group.LocalAll()
+		if locals == nil || len(locals) == 0 {
+			delete(o.nanos, nano.Address)
+		}
+		return nil
+	}()
 
-	return o.gateway.NanoLocalUnregister(address)
+	if err != nil {
+		return err
+	}
+
+	return o.gateway.NanoLocalUnregister(nano)
 }
 
 func (o *Microroller) generateMessageId() uint64 {

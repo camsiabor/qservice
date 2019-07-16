@@ -70,5 +70,7 @@ func (o *Tiny) Post(request *Message) (*Message, error) {
 }
 
 func (o *Tiny) NanoLocalRegister(nano *Nano) error {
+	nano.CallbackAdd(func(event NanoEvent, nano *Nano, context interface{}) {
+	})
 	return o.tina.microroller.NanoLocalRegister(nano)
 }

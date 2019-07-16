@@ -161,7 +161,7 @@ func (o *MGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *MGateway) NanoLocalUnregister(address string) error {
+func (o *MGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
 	return nil
 }
 

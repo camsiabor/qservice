@@ -305,7 +305,7 @@ func (o *ZGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *ZGateway) NanoLocalUnregister(address string) error {
+func (o *ZGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
 	// TODO implementation
 	return nil
 }
