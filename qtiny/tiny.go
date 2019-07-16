@@ -1,6 +1,7 @@
 package qtiny
 
 import (
+	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"sync"
 )
@@ -17,6 +18,7 @@ type TinyKind interface {
 
 	GetId() string
 	GetGroup() string
+	GetGuide() *TinyGuide
 	GetOptions() TinyOptions
 	GetConfig() map[string]interface{}
 	GetTina() *Tina
@@ -40,17 +42,23 @@ type Tiny struct {
 
 	mutex sync.RWMutex
 
+	nanos []*Nano
+
 	flag    TinyFlag
 	options TinyOptions
 	config  map[string]interface{}
+}
+
+func (o *Tiny) GetId() string {
+	return o.id
 }
 
 func (o *Tiny) GetTina() *Tina {
 	return o.tina
 }
 
-func (o *Tiny) GetId() string {
-	return o.id
+func (o *Tiny) GetGuide() *TinyGuide {
+	return o.guide
 }
 
 func (o *Tiny) GetGroup() string {
@@ -70,7 +78,23 @@ func (o *Tiny) Post(request *Message) (*Message, error) {
 }
 
 func (o *Tiny) NanoLocalRegister(nano *Nano) error {
-	nano.CallbackAdd(func(event NanoEvent, nano *Nano, context interface{}) {
-	})
-	return o.tina.microroller.NanoLocalRegister(nano)
+	if nano == nil {
+		return fmt.Errorf("nano is nil")
+	}
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	var err = o.tina.microroller.NanoLocalRegister(nano)
+	if err != nil {
+		return err
+	}
+
+	if o.nanos == nil {
+		o.nanos = []*Nano{nano}
+	} else {
+		o.nanos = append(o.nanos, nano)
+	}
+
+	return nil
 }
