@@ -94,7 +94,7 @@ func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}
 
 	var future = &Future{}
 	future.Name = "tina.deploy"
-	future.routine = func(event FutureEvent, future *Future) int {
+	future.routine = func(event FutureEvent, future *Future) FutureCallbackReturn {
 		if guide.Start == nil {
 			_ = future.Fail(0, "no start routine is set in tiny guide")
 			return 0
@@ -150,7 +150,7 @@ func (o *Tina) Undeploy(tinyId string) *Future {
 		return future
 	}
 
-	future.routine = func(event FutureEvent, future *Future) int {
+	future.routine = func(event FutureEvent, future *Future) FutureCallbackReturn {
 
 		o.tinyMutex.Lock()
 		delete(o.tinys, tinyId)

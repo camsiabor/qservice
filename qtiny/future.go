@@ -7,7 +7,7 @@ import (
 )
 
 type FutureEvent int
-type FutureCallbackCode int
+type FutureCallbackReturn int
 
 const (
 	FutureEventRoutine FutureEvent = 0x0001
@@ -18,11 +18,11 @@ const (
 )
 
 const (
-	FutureCallbackContinue  FutureCallbackCode = 0x0000
-	FutureCallbackTerminate FutureCallbackCode = 0x0001
+	FutureCallbackContinue  FutureCallbackReturn = 0x0000
+	FutureCallbackTerminate FutureCallbackReturn = 0x0001
 )
 
-type FutureCallback func(event FutureEvent, future *Future) FutureCallbackCode
+type FutureCallback func(event FutureEvent, future *Future) FutureCallbackReturn
 
 type Future struct {
 	util.LazyData
