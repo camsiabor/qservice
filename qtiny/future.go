@@ -186,7 +186,7 @@ func (o *Future) forward() {
 		}
 	} else {
 		if o.onFail != nil {
-			o.onFail(FutureEventSucceed, o)
+			o.onFail(FutureEventFail, o)
 		}
 	}
 }
