@@ -5,6 +5,7 @@ import (
 	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"log"
+	"runtime"
 	"sync"
 	"sync/atomic"
 )
@@ -61,7 +62,9 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 	}
 	o.serial = 0
 	o.control = make(chan string, 8)
-	go o.loop()
+	for i := 1; i <= runtime.NumCPU(); i++ {
+		go o.loop()
+	}
 	return nil
 }
 
@@ -129,19 +132,15 @@ func (o *Microroller) handleReply(response *Message) {
 	response.Related = request
 
 	if request.Handler != nil {
-		go func() {
-			request.Handler(response)
-			if request.ReplyChannel != nil {
-				request.ReplyChannel <- response
-			}
-		}()
+		request.Handler(response)
+		if request.ReplyChannel != nil {
+			request.ReplyChannel <- response
+		}
 		return
 	}
-
 	if request.ReplyChannel != nil {
 		request.ReplyChannel <- response
 	}
-
 }
 
 func (o *Microroller) NanoLocalRegister(nano *Nano) error {

@@ -66,6 +66,7 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 		var interval = util.GetInt64(config, 10, "reconnect.interval")
 		o.ReconnectInterval = time.Duration(interval) * time.Second
 	}
+
 	if o.conn != nil {
 		return fmt.Errorf("already connected")
 	}
@@ -76,6 +77,7 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 
 func (o *ZooWatcher) reconnect(timer *qroutine.Timer, err error) {
 	o.conn, o.eventChannel, err = zk.Connect(o.Endpoints, o.SessionTimeout)
+	o.conn.ReconnectInterval = o.ReconnectInterval
 	o.connectEventLoops(false)
 	if o.connected {
 		go o.connectEventLoops(true)

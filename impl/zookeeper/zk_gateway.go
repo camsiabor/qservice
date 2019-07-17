@@ -328,7 +328,7 @@ func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 	var address = box.path
 	var nano = o.NanoRemoteGet(address)
 	if nano == nil {
-		return true
+		o.NanoRemoteRegister(address)
 	}
 	nano.RemoteSet(children, nil)
 	return true
