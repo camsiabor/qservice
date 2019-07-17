@@ -90,51 +90,79 @@ func (o *Tina) initGateway(config map[string]interface{}) error {
 	return o.microroller.Start(config)
 }
 
-func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) (Future, error) {
+func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) *Future {
 
-	var future = &FutureImpl{}
+	var future = &Future{}
+	future.Name = "tina.deploy"
+	future.routine = func(event FutureEvent, future *Future) int {
+		if guide.Start == nil {
+			_ = future.Fail(0, "no start routine is set in tiny guide")
+			return 0
+		}
 
-	if guide.Start == nil {
-		_ = future.Fail(0, "no start routine is set in tiny guide")
-		return future, util.AsError(future.errCause)
+		o.tinyMutex.RLock()
+		var current = o.tinys[id]
+		o.tinyMutex.RUnlock()
+
+		if current != nil {
+			_ = future.Fail(0, "already deployed a tiny with id : "+id)
+			return 0
+		}
+
+		if len(id) == 0 {
+			id = uuid.NewV4().String()
+		}
+
+		var tiny = &Tiny{}
+		tiny.id = id
+		tiny.flag = flag
+		tiny.config = config
+		tiny.options = options
+		tiny.guide = guide
+		tiny.tina = o
+
+		o.tinyMutex.Lock()
+		o.tinys[tiny.id] = tiny
+		o.tinyMutex.Unlock()
+
+		if flag&TinyFlagDeploySync > 0 {
+			tiny.guide.Start(tiny, config, future)
+		} else {
+			go tiny.guide.Start(tiny, config, future)
+		}
+		return 0
 	}
 
-	o.tinyMutex.RLock()
-	var current = o.tinys[id]
-	o.tinyMutex.RUnlock()
-
-	if current != nil {
-		_ = future.Fail(0, "already deployed a tiny with id : "+id)
-		return nil, util.AsError(future.errCause)
-	}
-
-	if len(id) == 0 {
-		id = uuid.NewV4().String()
-	}
-
-	var tiny = &Tiny{}
-	tiny.id = id
-	tiny.flag = flag
-	tiny.config = config
-	tiny.options = options
-	tiny.guide = guide
-	tiny.tina = o
-
-	o.tinyMutex.Lock()
-	o.tinys[tiny.id] = tiny
-	o.tinyMutex.Unlock()
-
-	if flag&TinyFlagDeploySync > 0 {
-		tiny.guide.Start(tiny, future)
-	} else {
-		go tiny.guide.Start(tiny, future)
-	}
-
-	return future, nil
+	return future
 }
 
-func (o *Tina) Undeploy(id string) (Future, error) {
-	return nil, nil
+func (o *Tina) Undeploy(tinyId string) *Future {
+
+	var future = &Future{}
+	future.Name = "tina.undeploy"
+
+	o.tinyMutex.RLock()
+	var tiny = o.tinys[tinyId]
+	o.tinyMutex.RUnlock()
+
+	if tiny == nil {
+		future.isSucceed = true
+		return future
+	}
+
+	future.routine = func(event FutureEvent, future *Future) int {
+
+		o.tinyMutex.Lock()
+		delete(o.tinys, tinyId)
+		o.tinyMutex.Unlock()
+
+		tiny.Stop()
+
+		_ = future.Succeed(0, tinyId)
+		return 0
+	}
+
+	return future
 }
 
 func (o *Tina) SetGateway(gateway Gateway) *Tina {

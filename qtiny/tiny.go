@@ -27,9 +27,9 @@ type TinyKind interface {
 }
 
 type TinyGuide struct {
-	Start func(tiny TinyKind, future Future)
-	Stop  func(tiny TinyKind, future Future)
-	Err   func(tiny TinyKind, err error)
+	Start func(tiny TinyKind, config map[string]interface{}, future *Future)
+	Stop  func(tiny TinyKind, config map[string]interface{}, future *Future)
+	Err   func(tiny TinyKind, config map[string]interface{}, err error)
 }
 
 type Tiny struct {
@@ -97,4 +97,16 @@ func (o *Tiny) NanoLocalRegister(nano *Nano) error {
 	}
 
 	return nil
+}
+
+func (o *Tiny) Stop() {
+	if o.nanos == nil {
+		return
+	}
+	for _, nano := range o.nanos {
+		_ = nano.CallbackInvoke(NanoEventStop, o, false)
+	}
+	o.mutex.Lock()
+	o.nanos = nil
+	o.mutex.Unlock()
 }
