@@ -126,9 +126,9 @@ func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}
 		o.tinyMutex.Unlock()
 
 		if flag&TinyFlagDeploySync > 0 {
-			tiny.guide.Start(tiny, config, future)
+			tiny.Start(future)
 		} else {
-			go tiny.guide.Start(tiny, config, future)
+			go tiny.Start(future)
 		}
 		return 0
 	}
@@ -156,9 +156,8 @@ func (o *Tina) Undeploy(tinyId string) *Future {
 		delete(o.tinys, tinyId)
 		o.tinyMutex.Unlock()
 
-		tiny.Stop()
+		tiny.Stop(future)
 
-		_ = future.Succeed(0, tinyId)
 		return 0
 	}
 

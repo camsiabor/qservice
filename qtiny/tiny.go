@@ -13,9 +13,10 @@ const (
 	TinyFlagDeploySync TinyFlag = 0x1000
 )
 
+/* ===== TinyKind ============================================================ */
+
 type TinyKind interface {
 	util.LazyDataKind
-
 	GetId() string
 	GetGroup() string
 	GetGuide() *TinyGuide
@@ -26,11 +27,77 @@ type TinyKind interface {
 	NanoLocalRegister(nano *Nano) error
 }
 
+/* ===== TinyGuide ============================================================ */
+
+type TinyGuideEvent int
+
+const (
+	TinyGuideEventStart  TinyGuideEvent = 0x0001
+	TinyGuideEventStop   TinyGuideEvent = 0x0002
+	TinyGuideEventError  TinyGuideEvent = 0x0010
+	TinyGuideEventAspect TinyGuideEvent = 0x1000
+)
+
+type TinyGuideCallback func(event TinyGuideEvent, tiny TinyKind, config map[string]interface{}, future *Future, guide *TinyGuide, err error)
 type TinyGuide struct {
-	Start func(tiny TinyKind, config map[string]interface{}, future *Future)
-	Stop  func(tiny TinyKind, config map[string]interface{}, future *Future)
-	Err   func(tiny TinyKind, config map[string]interface{}, err error)
+	mutex     sync.Mutex
+	Start     TinyGuideCallback
+	Stop      TinyGuideCallback
+	Err       TinyGuideCallback
+	callbacks []TinyGuideCallback
 }
+
+func (o *TinyGuide) Invoke(event TinyGuideEvent, tiny TinyKind, config map[string]interface{}, future *Future) {
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	defer func() {
+		var pan = recover()
+		if pan != nil && o.Err != nil {
+			var err = util.AsError(pan)
+			o.Err(TinyGuideEventError|event, tiny, config, future, o, err)
+		}
+	}()
+
+	if TinyGuideEventStart == event {
+		o.Start(event, tiny, config, future, o, nil)
+	} else if TinyGuideEventStop == event {
+		o.Stop(event, tiny, config, future, o, nil)
+	}
+
+	if o.callbacks == nil {
+		return
+	}
+
+	for _, callback := range o.callbacks {
+		if callback == nil {
+			continue
+		}
+		func() {
+			defer func() {
+				var pan = recover()
+				if pan != nil {
+					callback(TinyGuideEventError|event, tiny, config, future, o, util.AsError(pan))
+				}
+			}()
+			callback(event, tiny, config, future, o, nil)
+		}()
+	}
+
+}
+
+func (o *TinyGuide) CallbackAdd(callback TinyGuideCallback) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	if o.callbacks == nil {
+		o.callbacks = []TinyGuideCallback{callback}
+	} else {
+		o.callbacks = append(o.callbacks, callback)
+	}
+}
+
+/* ===== Tiny ============================================================ */
 
 type Tiny struct {
 	util.LazyData
@@ -99,7 +166,20 @@ func (o *Tiny) NanoLocalRegister(nano *Nano) error {
 	return nil
 }
 
-func (o *Tiny) Stop() {
+func (o *Tiny) Start(future *Future) {
+	if future == nil {
+		future = &Future{}
+	}
+	o.guide.Invoke(TinyGuideEventStart, o, o.config, future)
+}
+
+func (o *Tiny) Stop(future *Future) {
+
+	if future == nil {
+		future = &Future{}
+	}
+	o.guide.Invoke(TinyGuideEventStop, o, o.config, future)
+
 	if o.nanos == nil {
 		return
 	}
@@ -109,4 +189,5 @@ func (o *Tiny) Stop() {
 	o.mutex.Lock()
 	o.nanos = nil
 	o.mutex.Unlock()
+
 }
