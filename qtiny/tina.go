@@ -101,7 +101,7 @@ func (o *Tina) Deploy(id string, guide TinyGuideKind, config map[string]interfac
 		o.tinyMutex.RUnlock()
 
 		if current != nil {
-			_ = future.Fail(0, "already deployed a tiny with id : "+id)
+			future.Fail(0, "already deployed a tiny with id : "+id)
 			return 0
 		}
 

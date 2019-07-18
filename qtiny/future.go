@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"sync"
+	"time"
 )
 
 type FutureEvent int
@@ -47,6 +48,8 @@ type Future struct {
 	onFail    FutureCallback
 	onSucceed FutureCallback
 	onFinally FutureCallback
+
+	channel chan *Future
 }
 
 func (o *Future) SetRoutine(routine FutureCallback) *Future {
@@ -61,7 +64,7 @@ func (o *Future) Run() *Future {
 	defer func() {
 		var pan = recover()
 		if pan != nil {
-			_ = o.TryFail(0, pan)
+			o.TryFail(0, pan)
 		}
 	}()
 
@@ -70,7 +73,31 @@ func (o *Future) Run() *Future {
 	} else {
 		o.routine(FutureEventRoutine, o)
 	}
+
 	return o
+}
+
+func (o *Future) RunAndWait(timeout time.Duration) (*Future, error) {
+	if o.channel == nil {
+		o.channel = make(chan *Future)
+	}
+
+	go o.Run()
+
+	if timeout > 0 {
+		var timer = time.After(timeout)
+		select {
+		case ret, ok := <-o.channel:
+			if !ok {
+				return nil, fmt.Errorf("future complete channel is closed %v", o.Name)
+			}
+			return ret, nil
+		case <-timer:
+			return nil, fmt.Errorf("wait for future timeout %v", o.Name)
+		}
+	} else {
+		return <-o.channel, nil
+	}
 }
 
 func (o *Future) IsFail() bool {
@@ -81,36 +108,34 @@ func (o *Future) IsSucceed() bool {
 	return o.isSucceed
 }
 
-func (o *Future) Fail(code int, errCause interface{}) error {
+func (o *Future) Fail(code int, errCause interface{}) {
 	o.code = code
 	o.errCause = errCause
 	o.isFail = true
 	o.isSucceed = false
 	o.forward()
-	return nil
 }
 
-func (o *Future) Succeed(code int, result interface{}) error {
+func (o *Future) Succeed(code int, result interface{}) {
 	o.code = code
 	o.result = result
 	o.isFail = false
 	o.isSucceed = true
 	o.forward()
-	return nil
 }
 
-func (o *Future) TryFail(code int, cause interface{}) error {
+func (o *Future) TryFail(code int, cause interface{}) {
 	if o.isSucceed || o.isFail {
-		return fmt.Errorf("already completed. succeed %v. fail %v", o.isSucceed, o.isFail)
+		return
 	}
-	return o.Fail(code, cause)
+	o.Fail(code, cause)
 }
 
-func (o *Future) TrySucceed(code int, result interface{}) error {
+func (o *Future) TrySucceed(code int, result interface{}) {
 	if o.isSucceed || o.isFail {
-		return fmt.Errorf("already completed. succeed %v. fail %v", o.isSucceed, o.isFail)
+		return
 	}
-	return o.Succeed(code, result)
+	o.Succeed(code, result)
 }
 
 func (o *Future) Code() int {
@@ -123,6 +148,10 @@ func (o *Future) Result() interface{} {
 
 func (o *Future) ErrCause() interface{} {
 	return o.errCause
+}
+
+func (o *Future) Err() error {
+	return util.AsError(o.errCause)
 }
 
 func (o *Future) GetContext() interface{} {
@@ -169,6 +198,11 @@ func (o *Future) forward() {
 		}
 		if o.onFinally != nil {
 			o.onFinally(FutureEventFinally, o)
+		}
+		if o.channel != nil {
+			o.channel <- o
+			close(o.channel)
+			o.channel = nil
 		}
 	}()
 
