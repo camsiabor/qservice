@@ -38,7 +38,7 @@ const (
 	TinyGuideEventAspect TinyGuideEvent = 0x1000
 )
 
-type TinyGuideCallback func(event TinyGuideEvent, tiny TinyKind, config map[string]interface{}, future *Future, guide *TinyGuide, err error)
+type TinyGuideCallback func(event TinyGuideEvent, tiny TinyKind, guide *TinyGuide, config map[string]interface{}, future *Future, err error)
 type TinyGuide struct {
 	mutex     sync.Mutex
 	Start     TinyGuideCallback
@@ -56,14 +56,14 @@ func (o *TinyGuide) Invoke(event TinyGuideEvent, tiny TinyKind, config map[strin
 		var pan = recover()
 		if pan != nil && o.Err != nil {
 			var err = util.AsError(pan)
-			o.Err(TinyGuideEventError|event, tiny, config, future, o, err)
+			o.Err(TinyGuideEventError|event, tiny, o, config, future, err)
 		}
 	}()
 
 	if TinyGuideEventStart == event {
-		o.Start(event, tiny, config, future, o, nil)
+		o.Start(event, tiny, o, config, future, nil)
 	} else if TinyGuideEventStop == event {
-		o.Stop(event, tiny, config, future, o, nil)
+		o.Stop(event, tiny, o, config, future, nil)
 	}
 
 	if o.callbacks == nil {
@@ -78,10 +78,10 @@ func (o *TinyGuide) Invoke(event TinyGuideEvent, tiny TinyKind, config map[strin
 			defer func() {
 				var pan = recover()
 				if pan != nil {
-					callback(TinyGuideEventError|event, tiny, config, future, o, util.AsError(pan))
+					callback(TinyGuideEventError|event, tiny, o, config, future, util.AsError(pan))
 				}
 			}()
-			callback(event, tiny, config, future, o, nil)
+			callback(event, tiny, o, config, future, nil)
 		}()
 	}
 
