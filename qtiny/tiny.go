@@ -19,7 +19,7 @@ type TinyKind interface {
 	util.LazyDataKind
 	GetId() string
 	GetGroup() string
-	GetGuide() *TinyGuide
+	GetGuide() TinyGuideKind
 	GetOptions() TinyOptions
 	GetConfig() map[string]interface{}
 	GetTina() *Tina
@@ -38,8 +38,15 @@ const (
 	TinyGuideEventAspect TinyGuideEvent = 0x1000
 )
 
-type TinyGuideCallback func(event TinyGuideEvent, tiny TinyKind, guide *TinyGuide, config map[string]interface{}, future *Future, err error)
+type TinyGuideCallback func(event TinyGuideEvent, tiny TinyKind, guide TinyGuideKind, config map[string]interface{}, future *Future, err error)
+type TinyGuideKind interface {
+	util.LazyDataKind
+	CallbackAdd(callback TinyGuideCallback)
+	Invoke(event TinyGuideEvent, tiny TinyKind, config map[string]interface{}, future *Future)
+}
+
 type TinyGuide struct {
+	util.LazyData
 	mutex     sync.Mutex
 	Start     TinyGuideCallback
 	Stop      TinyGuideCallback
@@ -105,7 +112,7 @@ type Tiny struct {
 	id    string
 	group string
 	tina  *Tina
-	guide *TinyGuide
+	guide TinyGuideKind
 
 	mutex sync.RWMutex
 
@@ -124,7 +131,7 @@ func (o *Tiny) GetTina() *Tina {
 	return o.tina
 }
 
-func (o *Tiny) GetGuide() *TinyGuide {
+func (o *Tiny) GetGuide() TinyGuideKind {
 	return o.guide
 }
 

@@ -90,15 +90,11 @@ func (o *Tina) initGateway(config map[string]interface{}) error {
 	return o.microroller.Start(config)
 }
 
-func (o *Tina) Deploy(id string, guide *TinyGuide, config map[string]interface{}, flag TinyFlag, options TinyOptions) *Future {
+func (o *Tina) Deploy(id string, guide TinyGuideKind, config map[string]interface{}, flag TinyFlag, options TinyOptions) *Future {
 
 	var future = &Future{}
 	future.Name = "tina.deploy"
 	future.routine = func(event FutureEvent, future *Future) FutureCallbackReturn {
-		if guide.Start == nil {
-			_ = future.Fail(0, "no start routine is set in tiny guide")
-			return 0
-		}
 
 		o.tinyMutex.RLock()
 		var current = o.tinys[id]
