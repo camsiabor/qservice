@@ -36,6 +36,7 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 
 	if o.watcher == nil {
 		o.watcher = &ZooWatcher{}
+		o.watcher.Logger = o.Logger
 	}
 
 	err = o.watcher.Start(config)
@@ -188,6 +189,9 @@ func (o *ZGateway) Poll(limit int) (chan *qtiny.Message, error) {
 func (o *ZGateway) publish(consumerAddress string, prefix string, data []byte) error {
 	var uri = o.GetQueueZNodePath(consumerAddress)
 	var _, err = o.watcher.GetConn().Create(uri+prefix, data, zk.FlagEphemeral|zk.FlagSequence, zk.WorldACL(zk.PermAll))
+	if err != nil && o.Logger != nil {
+		o.Logger.Println("publish error ", err.Error())
+	}
 	return err
 }
 
@@ -328,13 +332,19 @@ func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 	var address = box.path
 	var nano = o.NanoRemoteGet(address)
 	if nano == nil {
-		o.NanoRemoteRegister(address)
+		nano = o.NanoRemoteRegister(address)
 	}
 	nano.RemoteSet(children, nil)
 	return true
 }
 
 func (o *ZGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+	if err != nil {
+		if o.Logger != nil {
+			o.Logger.Println("node queue consume error", err.Error())
+		}
+		return true
+	}
 	if data == nil {
 		return true
 	}

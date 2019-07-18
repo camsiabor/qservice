@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/util"
+	"log"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type WatchBox struct {
 	control chan bool
 	routine WatchRoutine
 	watcher *ZooWatcher
+	Logger  *log.Logger
 	Data    interface{}
 }
 
@@ -78,10 +80,16 @@ func (o *WatchBox) loop() {
 			err = fmt.Errorf("closed")
 		}
 		if event.Type == zk.EventNotWatching {
-			break
+			if o.Logger != nil {
+				o.Logger.Println("zookeeper watcher event not watching ", o.path)
+			}
 		}
-
 	}
+
+	if o.Logger != nil {
+		o.Logger.Println("zookeeper watcher loop end", o.path)
+	}
+
 }
 
 func (o *WatchBox) run(event *zk.Event, stat *zk.Stat, data interface{}, err error) (ret bool) {

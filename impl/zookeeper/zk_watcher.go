@@ -5,6 +5,7 @@ import (
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
+	"log"
 	"sync"
 	"time"
 )
@@ -33,6 +34,8 @@ type ZooWatcher struct {
 	connectChannelMutex sync.Mutex
 
 	reconnectTimer *qroutine.Timer
+
+	Logger *log.Logger
 }
 
 func (o *ZooWatcher) Start(config map[string]interface{}) error {
@@ -203,7 +206,7 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 	case WatchTypeChildren:
 		o.watchChildren[path] = box
 	}
-
+	box.Logger = o.Logger
 	go box.loop()
 }
 
