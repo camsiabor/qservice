@@ -64,7 +64,7 @@ func (o *Tina) initLogger(map[string]interface{}) error {
 		return nil
 	}
 	// TODO
-	o.logger = log.New(os.Stdout, "tina ", log.Lshortfile|log.LstdFlags|log.LUTC)
+	o.logger = log.New(os.Stdout, "[tina] ", log.Lshortfile|log.LstdFlags|log.LUTC)
 	return nil
 }
 
