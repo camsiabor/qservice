@@ -114,8 +114,11 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 			continue
 		}
 		var config = util.AsMap(v, true)
+		var one = o.unitGet(k)
+		one.config = config
+		one.init()
+		one.start()
 
-		o.unitStart(k, config)
 	}
 
 	o.watcherStart()

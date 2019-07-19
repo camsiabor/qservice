@@ -145,8 +145,6 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 		}
 	}
 
-	o.unitStart()
-
 }
 
 func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch *fswatcher.FsWatch, watcher *fswatcher.FsWatcher, err error) {

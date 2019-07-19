@@ -3,6 +3,7 @@ package qtiny
 import (
 	"fmt"
 	"github.com/camsiabor/qcom/util"
+	"github.com/twinj/uuid"
 	"sync"
 )
 
@@ -25,6 +26,7 @@ type TinyKind interface {
 	GetTina() *Tina
 	Post(request *Message) (response *Message, err error)
 	NanoLocalRegister(nano *Nano) error
+	NanoLocalUnregister(nanoId string)
 }
 
 /* ===== TinyGuide ============================================================ */
@@ -116,7 +118,7 @@ type Tiny struct {
 
 	mutex sync.RWMutex
 
-	nanos []*Nano
+	nanos map[string]*Nano
 
 	flag    TinyFlag
 	options TinyOptions
@@ -156,21 +158,33 @@ func (o *Tiny) NanoLocalRegister(nano *Nano) error {
 		return fmt.Errorf("nano is nil")
 	}
 
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
+	if o.tina == nil || o.tina.microroller == nil {
+		panic("tina or microroller is nil")
+	}
 
 	var err = o.tina.microroller.NanoLocalRegister(nano)
 	if err != nil {
 		return err
 	}
 
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.nanos == nil {
-		o.nanos = []*Nano{nano}
-	} else {
-		o.nanos = append(o.nanos, nano)
+		o.nanos = make(map[string]*Nano)
 	}
 
+	if len(nano.Id) == 0 {
+		nano.Id = uuid.NewV4().String()
+	}
+
+	o.nanos[nano.Id] = nano
+
 	return nil
+}
+
+func (o *Tiny) NanoLocalUnregister(nanoId string) {
+	panic("implement me")
 }
 
 func (o *Tiny) Start(future *Future) {
@@ -190,11 +204,17 @@ func (o *Tiny) Stop(future *Future) {
 	if o.nanos == nil {
 		return
 	}
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	for _, nano := range o.nanos {
+		if o.tina != nil && o.tina.microroller != nil {
+			_ = o.tina.microroller.NanoLocalUnregister(nano)
+		}
 		_ = nano.CallbackInvoke(NanoEventStop, o, false)
 	}
-	o.mutex.Lock()
+
 	o.nanos = nil
-	o.mutex.Unlock()
 
 }

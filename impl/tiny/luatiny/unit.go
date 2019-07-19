@@ -32,7 +32,7 @@ func (o *unit) start() {
 		}
 		if o.err != nil {
 			var logger = o.guide.tiny.GetTina().GetLogger()
-			var msg = fmt.Sprintf("lua tiny guide start %v : %v error %v", name, main, o.err.Error())
+			var msg = fmt.Sprintf("lua tiny guide start %v : %v error %v", o.name, o.main, o.err.Error())
 			if logger == nil {
 				log.Println(msg)
 			} else {
@@ -41,7 +41,7 @@ func (o *unit) start() {
 		}
 	}()
 
-	o.path, o.err = filepath.Abs(o.LuaPath + "/" + o.main)
+	o.path, o.err = filepath.Abs(o.guide.LuaPath + "/" + o.main)
 	_, o.err = RunLuaFile(o.L, o.main, func(L *lua.State, pan interface{}) {
 		o.err = util.AsError(pan)
 	})
@@ -116,24 +116,28 @@ func (o *unit) nanoLocalRegister(L *lua.State) int {
 		return 1
 	}
 
-	err = o.guide.tiny.NanoLocalRegister(
-		&qtiny.Nano{
-			Address: address,
-			Flag:    qtiny.NanoFlag(flag),
-			Options: nil, // TODO options
-			Handler: func(message *qtiny.Message) {
-				var ptrint = uintptr(unsafe.Pointer(message))
-				L.RawGeti(lua.LUA_REGISTRYINDEX, handlerReference)
-				L.PushInteger(int64(ptrint))
-				_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
-					var err = util.AsError(pan)
-					if err != nil {
-						_ = message.Error(0, err.Error())
-					}
-				})
-			},
+	var nano = &qtiny.Nano{
+		Address: address,
+		Flag:    qtiny.NanoFlag(flag),
+		Options: nil, // TODO options
+		Handler: func(message *qtiny.Message) {
+			var ptrint = uintptr(unsafe.Pointer(message))
+			L.RawGeti(lua.LUA_REGISTRYINDEX, handlerReference)
+			L.PushInteger(int64(ptrint))
+			_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
+				var err = util.AsError(pan)
+				if err != nil {
+					_ = message.Error(0, err.Error())
+				}
+			})
 		},
-	)
+	}
+
+	nano.CallbackAdd(func(event qtiny.NanoEvent, nano *qtiny.Nano, context interface{}) {
+
+	})
+
+	err = o.guide.tiny.NanoLocalRegister(nano)
 
 	if err == nil {
 		L.PushNil()
