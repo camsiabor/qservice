@@ -2,6 +2,7 @@ package luatiny
 
 import (
 	"encoding/json"
+	"github.com/camsiabor/qcom/qio"
 	"github.com/camsiabor/qcom/qref"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/util/fswatcher"
@@ -113,6 +114,7 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
+
 	var meta = util.GetMap(config, true, "meta")
 	if err = o.parseMeta(meta); err != nil {
 		return
@@ -120,15 +122,30 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 
 	var changes = make(map[string]interface{})
 	for k, update := range config {
-
+		if update == nil {
+			changes[k] = make(map[string]interface{})
+			continue
+		}
 		var current = o.Config[k]
 		if current == nil {
 			changes[k] = current
 			continue
 		}
+		var updateData, _ = json.Marshal(update)
+		var currentData, _ = json.Marshal(current)
+		if updateData == nil {
+			if currentData != nil {
+				changes[k] = make(map[string]interface{})
+			}
+			continue
+		}
 
-		var updateStr = json.Marshal(update)
+		if !qio.BytesEqual(updateData, currentData) {
+			changes[k] = update
+		}
 	}
+
+	o.unitStart()
 
 }
 

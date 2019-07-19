@@ -12,7 +12,10 @@ import (
 )
 
 type unit struct {
-	L      *lua.State
+	L *lua.State
+
+	guide *LuaTinyGuide
+
 	err    error
 	name   string
 	main   string
@@ -20,53 +23,16 @@ type unit struct {
 	config map[string]interface{}
 }
 
-func (o *LuaTinyGuide) unitGet(name string, main string, config map[string]interface{}) *unit {
-
-	if o.units == nil {
-		panic("units is nil")
-	}
-
-	var one *unit
-	func() {
-		o.unitMutex.RLock()
-		defer o.unitMutex.RUnlock()
-		one = o.units[name]
-	}()
-
-	if one != nil {
-		return one
-	}
-
-	one = &unit{}
-	one.name = name
-	one.main = main
-	one.config = config
-
-	if o.units == nil {
-		panic("units is nil")
-	}
-
-	func() {
-		o.unitMutex.Lock()
-		defer o.unitMutex.Unlock()
-		o.units[name] = one
-	}()
-
-	return one
-}
-
-func (o *LuaTinyGuide) unitStart(name string, main string, config map[string]interface{}) {
-
-	var one = o.unitGet(name, main, config)
+func (o *unit) start() {
 
 	defer func() {
 		var pan = recover()
 		if pan != nil {
-			one.err = util.AsError(pan)
+			o.err = util.AsError(pan)
 		}
-		if one.err != nil {
-			var logger = o.tiny.GetTina().GetLogger()
-			var msg = fmt.Sprintf("lua tiny guide start %v : %v error %v", name, main, one.err.Error())
+		if o.err != nil {
+			var logger = o.guide.tiny.GetTina().GetLogger()
+			var msg = fmt.Sprintf("lua tiny guide start %v : %v error %v", name, main, o.err.Error())
 			if logger == nil {
 				log.Println(msg)
 			} else {
@@ -75,31 +41,38 @@ func (o *LuaTinyGuide) unitStart(name string, main string, config map[string]int
 		}
 	}()
 
-	o.unitInit(one)
-
-	one.path, one.err = filepath.Abs(o.LuaPath + "/" + one.main)
-	_, one.err = RunLuaFile(one.L, one.main, func(L *lua.State, pan interface{}) {
-		one.err = util.AsError(pan)
+	o.path, o.err = filepath.Abs(o.LuaPath + "/" + o.main)
+	_, o.err = RunLuaFile(o.L, o.main, func(L *lua.State, pan interface{}) {
+		o.err = util.AsError(pan)
 	})
 
 }
 
-func (o *LuaTinyGuide) unitInit(one *unit) {
+func (o *unit) init() {
 
-	if one.L != nil {
+	if len(o.main) == 0 {
+		o.main = util.GetStr(o.config, "", "main")
+	}
+
+	if len(o.main) == 0 {
+		// TODO stop
 		return
 	}
 
-	one.L, one.err = InitLuaState(o.LuaPath, o.LuaCPath)
-	if one.err != nil {
+	if o.L != nil {
 		return
 	}
 
-	luar.Register(one.L, "", map[string]interface{}{
-		"tina": o.tiny.GetTina(),
+	o.L, o.err = InitLuaState(o.guide.LuaPath, o.guide.LuaCPath)
+	if o.err != nil {
+		return
+	}
+
+	luar.Register(o.L, "", map[string]interface{}{
+		"tina": o.guide.tiny.GetTina(),
 	})
 
-	one.L.Register("Reply", func(L *lua.State) int {
+	o.L.Register("Reply", func(L *lua.State) int {
 		var ptrvalue = L.ToInteger(1)
 		var ptr = unsafe.Pointer(uintptr(ptrvalue))
 		var message = (*qtiny.Message)(ptr)
@@ -114,10 +87,10 @@ func (o *LuaTinyGuide) unitInit(one *unit) {
 		return 1
 	})
 
-	one.L.Register("NanoLocalRegister", o.nanoLocalRegister)
+	o.L.Register("NanoLocalRegister", o.nanoLocalRegister)
 }
 
-func (o *LuaTinyGuide) nanoLocalRegister(L *lua.State) int {
+func (o *unit) nanoLocalRegister(L *lua.State) int {
 
 	if !L.IsTable(-1) {
 		L.PushString("invalid argument! need a table")
@@ -143,7 +116,7 @@ func (o *LuaTinyGuide) nanoLocalRegister(L *lua.State) int {
 		return 1
 	}
 
-	err = o.tiny.NanoLocalRegister(
+	err = o.guide.tiny.NanoLocalRegister(
 		&qtiny.Nano{
 			Address: address,
 			Flag:    qtiny.NanoFlag(flag),
@@ -171,5 +144,9 @@ func (o *LuaTinyGuide) nanoLocalRegister(L *lua.State) int {
 	}
 
 	return 1
+
+}
+
+func (o *unit) stop() {
 
 }

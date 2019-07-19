@@ -114,11 +114,8 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 			continue
 		}
 		var config = util.AsMap(v, true)
-		var main = util.GetStr(config, "", "main")
-		if len(main) == 0 {
-			continue
-		}
-		o.unitStart(k, main, config)
+
+		o.unitStart(k, config)
 	}
 
 	o.watcherStart()
@@ -146,4 +143,40 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 		}
 	}
 
+}
+
+func (o *LuaTinyGuide) unitGet(name string) *unit {
+
+	if o.units == nil {
+		func() {
+			o.unitMutex.Lock()
+			defer o.unitMutex.Unlock()
+			if o.units == nil {
+				o.units = make(map[string]*unit)
+			}
+		}()
+	}
+
+	var one *unit
+	func() {
+		o.unitMutex.RLock()
+		defer o.unitMutex.RUnlock()
+		one = o.units[name]
+	}()
+
+	if one != nil {
+		return one
+	}
+
+	one = &unit{}
+	one.name = name
+	one.guide = o
+
+	func() {
+		o.unitMutex.Lock()
+		defer o.unitMutex.Unlock()
+		o.units[name] = one
+	}()
+
+	return one
 }
