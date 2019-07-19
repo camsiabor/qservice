@@ -5,7 +5,7 @@ import (
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
-	"github.com/camsiabor/qservice/impl/memory"
+	"github.com/camsiabor/qservice/impl/gateway"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
 	"os"
@@ -14,8 +14,8 @@ import (
 )
 
 type ZGateway struct {
-	memory.MGateway
-	watcher *ZooWatcher
+	gateway.MGateway
+	watcher *gateway.ZooWatcher
 
 	connectId          string
 	pathNodeQueue      string
@@ -35,7 +35,7 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	var err error
 
 	if o.watcher == nil {
-		o.watcher = &ZooWatcher{}
+		o.watcher = &gateway.ZooWatcher{}
 		o.watcher.Logger = o.Logger
 	}
 
@@ -87,7 +87,7 @@ func (o *ZGateway) Stop(config map[string]interface{}) error {
 	return o.MGateway.Stop(config)
 }
 
-func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, err error) {
+func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *gateway.ZooWatcher, err error) {
 
 	if event.State == zk.StateDisconnected {
 		if o.Logger != nil {
@@ -114,7 +114,7 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 
-		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+		o.watcher.Watch(gateway.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
 		go func() {
 			for i := 0; i < 3; i++ {
@@ -235,7 +235,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 		if err != nil {
 			return fmt.Errorf("no consumer found : " + err.Error())
 		}
-		o.watcher.Watch(WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
+		o.watcher.Watch(gateway.WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
 		if children == nil || len(children) == 0 {
 			return fmt.Errorf("no consumer found for " + message.Address)
 		}
@@ -314,7 +314,7 @@ func (o *ZGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *gateway.WatchBox, watcher *gateway.ZooWatcher, err error) bool {
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("nano registry watch error", err.Error())
 		return true
@@ -338,7 +338,7 @@ func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 	return true
 }
 
-func (o *ZGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+func (o *ZGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *gateway.WatchBox, watcher *gateway.ZooWatcher, err error) bool {
 	if err != nil {
 		if o.Logger != nil {
 			o.Logger.Println("node queue consume error", err.Error())

@@ -1,13 +1,14 @@
 package zookeeper
 
 import (
+	"github.com/camsiabor/qservice/impl/gateway"
 	"sync"
 )
 
 var zkwMutex sync.Mutex
-var zkwInstances = map[string]*ZooWatcher{}
+var zkwInstances = map[string]*gateway.ZooWatcher{}
 
-func ZooWatcherGet(id string, endpoint string) (instance *ZooWatcher, err error) {
+func ZooWatcherGet(id string, endpoint string) (instance *gateway.ZooWatcher, err error) {
 
 	zkwMutex.Lock()
 	instance = zkwInstances[id]
@@ -18,7 +19,7 @@ func ZooWatcherGet(id string, endpoint string) (instance *ZooWatcher, err error)
 		defer zkwMutex.Unlock()
 		instance = zkwInstances[id]
 		if instance == nil {
-			instance = &ZooWatcher{}
+			instance = &gateway.ZooWatcher{}
 			instance.Id = id
 			zkwInstances[id] = instance
 		}
