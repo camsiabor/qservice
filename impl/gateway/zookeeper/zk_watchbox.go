@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/util"
-	"github.com/camsiabor/qservice/impl/gateway"
 	"log"
 	"time"
 )
@@ -17,14 +16,14 @@ const (
 	WatchTypeChildren WatchType = 3
 )
 
-type WatchRoutine func(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *gateway.ZooWatcher, err error) bool
+type WatchRoutine func(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool
 
 type WatchBox struct {
 	wtype   WatchType
 	path    string
 	control chan bool
 	routine WatchRoutine
-	watcher *gateway.ZooWatcher
+	watcher *ZooWatcher
 	Logger  *log.Logger
 	Data    interface{}
 }

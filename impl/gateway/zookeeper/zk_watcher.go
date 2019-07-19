@@ -5,7 +5,7 @@ import (
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
-	"github.com/camsiabor/qservice/impl/gateway"
+
 	"log"
 	"sync"
 	"time"
@@ -26,9 +26,9 @@ type ZooWatcher struct {
 	mutex sync.RWMutex
 
 	watchMutex    sync.RWMutex
-	watchGet      map[string]*gateway.WatchBox
-	watchExist    map[string]*gateway.WatchBox
-	watchChildren map[string]*gateway.WatchBox
+	watchGet      map[string]*WatchBox
+	watchExist    map[string]*WatchBox
+	watchChildren map[string]*WatchBox
 
 	connected           bool
 	connectChannel      []chan bool
@@ -45,13 +45,13 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 	defer o.mutex.Unlock()
 
 	if o.watchGet == nil {
-		o.watchGet = map[string]*gateway.WatchBox{}
+		o.watchGet = map[string]*WatchBox{}
 	}
 	if o.watchExist == nil {
-		o.watchExist = map[string]*gateway.WatchBox{}
+		o.watchExist = map[string]*WatchBox{}
 	}
 	if o.watchChildren == nil {
-		o.watchChildren = map[string]*gateway.WatchBox{}
+		o.watchChildren = map[string]*WatchBox{}
 	}
 
 	if o.Endpoints == nil || len(o.Endpoints) == 0 {
@@ -161,23 +161,23 @@ func (o *ZooWatcher) connectEventLoops(loop bool) {
 	}
 }
 
-func (o *ZooWatcher) getWatch(wtype gateway.WatchType, path string, lock bool) *gateway.WatchBox {
+func (o *ZooWatcher) getWatch(wtype WatchType, path string, lock bool) *WatchBox {
 	if lock {
 		o.watchMutex.RLock()
 		defer o.watchMutex.RUnlock()
 	}
 	switch wtype {
-	case gateway.WatchTypeGet:
+	case WatchTypeGet:
 		return o.watchGet[path]
-	case gateway.WatchTypeExist:
+	case WatchTypeExist:
 		return o.watchExist[path]
-	case gateway.WatchTypeChildren:
+	case WatchTypeChildren:
 		return o.watchChildren[path]
 	}
 	return nil
 }
 
-func (o *ZooWatcher) Watch(wtype gateway.WatchType, path string, data interface{}, routine gateway.WatchRoutine) {
+func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routine WatchRoutine) {
 	var box = o.getWatch(wtype, path, true)
 	if box != nil {
 		box.routine = routine
@@ -191,7 +191,7 @@ func (o *ZooWatcher) Watch(wtype gateway.WatchType, path string, data interface{
 		return
 	}
 
-	box = &gateway.WatchBox{}
+	box = &WatchBox{}
 	box.wtype = wtype
 	box.path = path
 	box.routine = routine
@@ -200,11 +200,11 @@ func (o *ZooWatcher) Watch(wtype gateway.WatchType, path string, data interface{
 	box.Data = data
 
 	switch wtype {
-	case gateway.WatchTypeGet:
+	case WatchTypeGet:
 		o.watchGet[path] = box
-	case gateway.WatchTypeExist:
+	case WatchTypeExist:
 		o.watchExist[path] = box
-	case gateway.WatchTypeChildren:
+	case WatchTypeChildren:
 		o.watchChildren[path] = box
 	}
 	box.Logger = o.Logger
