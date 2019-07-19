@@ -1,25 +1,52 @@
 package luatiny
 
 import (
-	"fmt"
+	"encoding/json"
+	"github.com/camsiabor/qcom/qref"
+	"github.com/camsiabor/qcom/util"
+	"github.com/camsiabor/qservice/impl/util/fswatcher"
 	"github.com/fsnotify/fsnotify"
+	"io/ioutil"
+	"path/filepath"
+	"time"
 )
 
 func (o *LuaTinyGuide) watcherStart() {
 
-	var err error
-	o.watcherConfig, err = fsnotify.NewWatcher()
-	if err != nil {
-		panic(err)
+	defer func() {
+		var pan = recover()
+		if pan != nil {
+			o.Logger.Println(qref.StackString(2))
+		}
+	}()
+
+	if o.watcherConfig == nil {
+		o.watcherConfig = &fswatcher.FsWatcher{}
 	}
-	o.watcherScript, err = fsnotify.NewWatcher()
-	if err != nil {
-		panic(err)
+	if o.watcherScript == nil {
+		o.watcherScript = &fswatcher.FsWatcher{}
 	}
 
-	o.watcherConfig.Add(o.ConfigPath)
+	/*
+		var watch = &fswatcher.FsWatch{
+			Path: o.ConfigPathAbs,
+			AsFile: true,
+			ReAddDelay: time.Second,
+			Handler: o.onConfigChange,
+		}
 
-	// TODO iterate
+		if err := o.watcherConfig.Add(watch); err != nil {
+			o.Logger.Println(err)
+		}
+	*/
+
+	_ = o.watcherConfig.Add(&fswatcher.FsWatch{
+		Name:          filepath.Dir(o.ConfigPathAbs),
+		ReAddDelay:    time.Second,
+		CompressDelay: time.Second,
+		Handler:       o.onConfigChange,
+	})
+
 	func() {
 		o.unitMutex.RLock()
 		defer o.unitMutex.RUnlock()
@@ -27,65 +54,88 @@ func (o *LuaTinyGuide) watcherStart() {
 			if v.L == nil {
 				continue
 			}
-			o.watcherScript.Add(v.path)
+			var watch = &fswatcher.FsWatch{
+				Path:       v.path,
+				AsFile:     true,
+				ReAddDelay: time.Second,
+				Handler:    o.onScriptChange,
+			}
+			if err := o.watcherScript.Add(watch); err != nil {
+				o.Logger.Println(err)
+			}
 		}
 	}()
 
-	go o.watchingConfig()
-	go o.watchingScript()
 }
 
 func (o *LuaTinyGuide) watcherStop() {
 	if o.watcherConfig != nil {
-		o.watcherConfig.Close()
+		o.watcherConfig.Stop()
 	}
 	if o.watcherScript != nil {
-		o.watcherScript.Close()
+		o.watcherScript.Stop()
 	}
 }
 
-func (o *LuaTinyGuide) watchingConfig() {
+func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch *fswatcher.FsWatch, watcher *fswatcher.FsWatcher, err error) {
+
+	if err != nil {
+		o.Logger.Println(err)
+		return
+	}
+
 	defer func() {
 		var pan = recover()
 		if pan != nil {
-			o.Logger.Println(pan)
+			err = util.AsError(pan)
+		}
+		if err != nil {
+			o.Logger.Println("config file change error", err.Error())
 		}
 	}()
-	for {
-		select {
-		case event, ok := <-o.watcherConfig.Events:
-			if !ok {
-				return
-			}
-			o.Logger.Println(event.String())
-			o.watcherConfig.Remove(o.ConfigPath)
-			o.watcherConfig.Add(o.ConfigPath)
-		case err, ok := <-o.watcherConfig.Errors:
-			if !ok {
-				return
-			}
-			o.Logger.Println(err)
-		}
+
+	o.Logger.Println("[config] ", path, event.String())
+
+	if path != o.ConfigPathAbs {
+		return
 	}
-	o.Logger.Println("out!")
+
+	bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(bytes, &config)
+	if err != nil {
+		return
+	}
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	var meta = util.GetMap(config, true, "meta")
+	if err = o.parseMeta(meta); err != nil {
+		return
+	}
+
+	var changes = make(map[string]interface{})
+	for k, update := range config {
+
+		var current = o.Config[k]
+		if current == nil {
+			changes[k] = current
+			continue
+		}
+
+		var updateStr = json.Marshal(update)
+	}
+
 }
 
-func (o *LuaTinyGuide) watchingScript() {
-	for {
-		select {
-		case event, ok := <-o.watcherConfig.Events:
-			if !ok {
-				return
-			}
-			if event.Op&fsnotify.Write == fsnotify.Write {
-
-			}
-
-		case err, ok := <-o.watcherConfig.Errors:
-			if !ok {
-				return
-			}
-			fmt.Println(err)
-		}
+func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch *fswatcher.FsWatch, watcher *fswatcher.FsWatcher, err error) {
+	if err != nil {
+		o.Logger.Println(err)
+		return
 	}
+	o.Logger.Println(event.String(), path)
 }

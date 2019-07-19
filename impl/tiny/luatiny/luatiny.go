@@ -3,8 +3,8 @@ package luatiny
 import (
 	"encoding/json"
 	"github.com/camsiabor/qcom/util"
+	"github.com/camsiabor/qservice/impl/util/fswatcher"
 	"github.com/camsiabor/qservice/qtiny"
-	"github.com/fsnotify/fsnotify"
 	"io/ioutil"
 	"log"
 	"os"
@@ -17,8 +17,9 @@ type LuaTinyGuide struct {
 
 	Name string
 
-	ConfigPath string
-	Config     map[string]interface{}
+	ConfigPath    string
+	ConfigPathAbs string
+	Config        map[string]interface{}
 
 	LuaPath  string
 	LuaCPath string
@@ -32,8 +33,8 @@ type LuaTinyGuide struct {
 
 	tiny qtiny.TinyKind
 
-	watcherConfig *fsnotify.Watcher
-	watcherScript *fsnotify.Watcher
+	watcherConfig *fswatcher.FsWatcher
+	watcherScript *fswatcher.FsWatcher
 }
 
 func NewLuaTinyGuide(name string, configPath string) *LuaTinyGuide {
@@ -43,10 +44,30 @@ func NewLuaTinyGuide(name string, configPath string) *LuaTinyGuide {
 	}
 	guide.Name = name
 	guide.ConfigPath = configPath
+	guide.ConfigPathAbs, _ = filepath.Abs(configPath)
 	guide.TinyGuide.Start = guide.start
 	guide.TinyGuide.Stop = guide.stop
 	guide.units = make(map[string]*unit)
 	return guide
+}
+
+func (o *LuaTinyGuide) parseMeta(meta map[string]interface{}) (err error) {
+	if len(o.LuaPath) == 0 {
+		o.LuaPath = util.GetStr(meta, "../../src/github.com/camsiabor/test/lua/", "path")
+		o.LuaPath, err = filepath.Abs(o.LuaPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(o.LuaCPath) == 0 {
+		o.LuaCPath = util.GetStr(meta, o.LuaPath, "cpath")
+		o.LuaCPath, err = filepath.Abs(o.LuaCPath)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, guide qtiny.TinyGuideKind, config map[string]interface{}, future *qtiny.Future, err error) {
@@ -74,29 +95,18 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 
 	o.tiny = tiny
 
-	bytes, err := ioutil.ReadFile(o.ConfigPath)
-	if err != nil {
-		return
-	}
-	err = json.Unmarshal(bytes, &o.Config)
-	if err != nil {
+	var bytes []byte
+	if bytes, err = ioutil.ReadFile(o.ConfigPath); err != nil {
 		return
 	}
 
-	if len(o.LuaPath) == 0 {
-		o.LuaPath = util.GetStr(config, "../../src/github.com/camsiabor/test/lua/", "meta", "path")
-		o.LuaPath, err = filepath.Abs(o.LuaPath)
-		if err != nil {
-			return
-		}
+	if err = json.Unmarshal(bytes, &o.Config); err != nil {
+		return
 	}
 
-	if len(o.LuaCPath) == 0 {
-		o.LuaCPath = util.GetStr(config, o.LuaPath, "meta", "cpath")
-		o.LuaCPath, err = filepath.Abs(o.LuaCPath)
-		if err != nil {
-			return
-		}
+	var meta = util.GetMap(config, true, "meta")
+	if err = o.parseMeta(meta); err != nil {
+		return
 	}
 
 	for k, v := range o.Config {
