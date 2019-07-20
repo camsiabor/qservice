@@ -29,7 +29,7 @@ type LuaTinyGuide struct {
 	mutex sync.RWMutex
 
 	unitMutex sync.RWMutex
-	units     map[string]*unit
+	units     map[string]*luaunit
 
 	tiny qtiny.TinyKind
 
@@ -47,7 +47,7 @@ func NewLuaTinyGuide(name string, configPath string) *LuaTinyGuide {
 	guide.ConfigPathAbs, _ = filepath.Abs(configPath)
 	guide.TinyGuide.Start = guide.start
 	guide.TinyGuide.Stop = guide.stop
-	guide.units = make(map[string]*unit)
+	guide.units = make(map[string]*luaunit)
 	return guide
 }
 
@@ -109,16 +109,16 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 		return
 	}
 
-	for k, v := range o.Config {
-		if k == "meta" || v == nil {
+	for unitname, v := range o.Config {
+		if unitname == "meta" || v == nil {
 			continue
 		}
 		var config = util.AsMap(v, true)
-		var one = o.unitGet(k)
+		var one = o.getLuaunit(unitname)
 		one.config = config
-		one.init()
-		one.start()
-
+		if err := one.start(true); err != nil {
+			o.Logger.Printf("start lua unit %v fail %v", unitname, err.Error())
+		}
 	}
 
 	o.watcherStart()
@@ -148,19 +148,19 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 
 }
 
-func (o *LuaTinyGuide) unitGet(name string) *unit {
+func (o *LuaTinyGuide) getLuaunit(name string) *luaunit {
 
 	if o.units == nil {
 		func() {
 			o.unitMutex.Lock()
 			defer o.unitMutex.Unlock()
 			if o.units == nil {
-				o.units = make(map[string]*unit)
+				o.units = make(map[string]*luaunit)
 			}
 		}()
 	}
 
-	var one *unit
+	var one *luaunit
 	func() {
 		o.unitMutex.RLock()
 		defer o.unitMutex.RUnlock()
@@ -171,9 +171,10 @@ func (o *LuaTinyGuide) unitGet(name string) *unit {
 		return one
 	}
 
-	one = &unit{}
-	one.name = name
+	one = &luaunit{}
 	one.guide = o
+	one.name = name
+	one.logger = o.Logger
 
 	func() {
 		o.unitMutex.Lock()

@@ -95,7 +95,7 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 		}
 	}()
 
-	o.Logger.Println("[config] ", path, event.String())
+	o.Logger.Println("[config] ", event.String())
 
 	if path != o.ConfigPathAbs {
 		return
@@ -145,6 +145,20 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 		}
 	}
 
+	for name, change := range changes {
+		var unit = o.getLuaunit(name)
+		var main = util.GetStr(change, "", "main")
+		if len(main) == 0 {
+			if unit != nil {
+				unit.stop(true)
+			}
+			continue
+		}
+		if err = unit.start(true); err != nil {
+			o.Logger.Println(err)
+		}
+	}
+
 }
 
 func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch *fswatcher.FsWatch, watcher *fswatcher.FsWatcher, err error) {
@@ -152,5 +166,5 @@ func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch 
 		o.Logger.Println(err)
 		return
 	}
-	o.Logger.Println(event.String(), path)
+	o.Logger.Println(event.String())
 }

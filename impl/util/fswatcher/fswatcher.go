@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+type FsWatchHandler func(event *fsnotify.Event, path string, watch *FsWatch, watcher *FsWatcher, err error)
+
 type FsWatch struct {
 	Name          string
 	Path          string
@@ -17,7 +19,7 @@ type FsWatch struct {
 	AsFile        bool
 	ReAddDelay    time.Duration
 	CompressDelay time.Duration
-	Handler       func(event *fsnotify.Event, path string, watch *FsWatch, watcher *FsWatcher, err error)
+	Handler       FsWatchHandler
 
 	looping bool
 	watcher *fsnotify.Watcher
@@ -33,10 +35,11 @@ func (o *FsWatcher) Add(watch *FsWatch) error {
 	if watch == nil {
 		return fmt.Errorf("invalid argument fs watch is null")
 	}
+
 	var err error
 
-	if len(watch.Path) == 0 {
-		if watch.Path, err = filepath.Abs(watch.Name); err != nil {
+	if !filepath.IsAbs(watch.Path) {
+		if watch.Path, err = filepath.Abs(watch.Path); err != nil {
 			return err
 		}
 	}
@@ -190,11 +193,13 @@ func (o *FsWatcher) handle(watch *FsWatch, event *fsnotify.Event) {
 		return
 	}
 
-	var path string
-	if watch.AsFile {
-		path = watch.Path
-	} else {
-		path, _ = filepath.Abs(watch.Path + "/" + event.Name)
+	var path = event.Name
+	if !filepath.IsAbs(path) {
+		if watch.AsFile {
+			path = watch.Path
+		} else {
+			path, _ = filepath.Abs(watch.Path + "/" + event.Name)
+		}
 	}
 
 	defer func() {
@@ -211,7 +216,6 @@ func (o *FsWatcher) handle(watch *FsWatch, event *fsnotify.Event) {
 				}
 			}()
 		}
-
 		watch.Handler(event, path, watch, o, util.AsError(pan))
 	}()
 

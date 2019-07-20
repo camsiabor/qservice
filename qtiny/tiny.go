@@ -26,7 +26,7 @@ type TinyKind interface {
 	GetTina() *Tina
 	Post(request *Message) (response *Message, err error)
 	NanoLocalRegister(nano *Nano) error
-	NanoLocalUnregister(nanoId string)
+	NanoLocalUnregister(nano *Nano) error
 }
 
 /* ===== TinyGuide ============================================================ */
@@ -183,8 +183,22 @@ func (o *Tiny) NanoLocalRegister(nano *Nano) error {
 	return nil
 }
 
-func (o *Tiny) NanoLocalUnregister(nanoId string) {
-	panic("implement me")
+func (o *Tiny) NanoLocalUnregister(nano *Nano) error {
+
+	if o.nanos == nil {
+		return nil
+	}
+
+	if err := o.tina.microroller.NanoLocalUnregister(nano); err != nil {
+		return err
+	}
+
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	delete(o.nanos, nano.Id)
+
+	return nil
 }
 
 func (o *Tiny) Start(future *Future) {

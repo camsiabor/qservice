@@ -6,65 +6,85 @@ import (
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
+	"github.com/twinj/uuid"
 	"log"
 	"path/filepath"
+	"sync"
 	"unsafe"
 )
 
-type unit struct {
+type luaunit struct {
 	L *lua.State
 
 	guide *LuaTinyGuide
 
-	err    error
-	name   string
-	main   string
-	path   string
+	err  error
+	name string
+	main string
+	path string
+
+	logger *log.Logger
+
 	config map[string]interface{}
+
+	mutex sync.RWMutex
+
+	nanoMutex sync.RWMutex
+	nanos     map[string]*qtiny.Nano
 }
 
-func (o *unit) start() {
+func (o *luaunit) start(restart bool) (err error) {
 
 	defer func() {
 		var pan = recover()
 		if pan != nil {
-			o.err = util.AsError(pan)
+			err = util.AsError(pan)
 		}
-		if o.err != nil {
-			var logger = o.guide.tiny.GetTina().GetLogger()
-			var msg = fmt.Sprintf("lua tiny guide start %v : %v error %v", o.name, o.main, o.err.Error())
-			if logger == nil {
-				log.Println(msg)
-			} else {
-				logger.Println(msg)
-			}
+		if err != nil {
+			o.err = err
 		}
 	}()
 
-	o.path, o.err = filepath.Abs(o.guide.LuaPath + "/" + o.main)
-	_, o.err = RunLuaFile(o.L, o.main, func(L *lua.State, pan interface{}) {
-		o.err = util.AsError(pan)
-	})
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
-}
+	if o.L != nil {
+		o.stop(false)
+	}
 
-func (o *unit) init() {
+	err = o.init(restart)
+	if err != nil {
+		return err
+	}
 
 	if len(o.main) == 0 {
 		o.main = util.GetStr(o.config, "", "main")
 	}
 
 	if len(o.main) == 0 {
-		// TODO stop
-		return
+		return fmt.Errorf("main is not set in luaunit %v ", o.name)
 	}
 
-	if o.L != nil {
-		return
+	o.path, err = filepath.Abs(o.guide.LuaPath + "/" + o.main)
+	if err != nil {
+		return err
+	}
+	_, err = RunLuaFile(o.L, o.main, func(L *lua.State, pan interface{}) {
+		err = util.AsError(pan)
+	})
+
+	o.err = err
+	return err
+}
+
+func (o *luaunit) init(restart bool) (err error) {
+
+	if !restart && o.L != nil {
+		return nil
 	}
 
-	o.L, o.err = InitLuaState(o.guide.LuaPath, o.guide.LuaCPath)
-	if o.err != nil {
+	o.L, err = InitLuaState(o.guide.LuaPath, o.guide.LuaCPath)
+	if err != nil {
 		return
 	}
 
@@ -88,9 +108,11 @@ func (o *unit) init() {
 	})
 
 	o.L.Register("NanoLocalRegister", o.nanoLocalRegister)
+
+	return nil
 }
 
-func (o *unit) nanoLocalRegister(L *lua.State) int {
+func (o *luaunit) nanoLocalRegister(L *lua.State) int {
 
 	if !L.IsTable(-1) {
 		L.PushString("invalid argument! need a table")
@@ -117,6 +139,7 @@ func (o *unit) nanoLocalRegister(L *lua.State) int {
 	}
 
 	var nano = &qtiny.Nano{
+		Id:      uuid.NewV4().String(),
 		Address: address,
 		Flag:    qtiny.NanoFlag(flag),
 		Options: nil, // TODO options
@@ -133,9 +156,21 @@ func (o *unit) nanoLocalRegister(L *lua.State) int {
 		},
 	}
 
-	nano.CallbackAdd(func(event qtiny.NanoEvent, nano *qtiny.Nano, context interface{}) {
+	if o.nanos == nil {
+		func() {
+			o.nanoMutex.Lock()
+			defer o.nanoMutex.Unlock()
+			if o.nanos == nil {
+				o.nanos = make(map[string]*qtiny.Nano)
+			}
+		}()
+	}
 
-	})
+	func() {
+		o.nanoMutex.Lock()
+		defer o.nanoMutex.Unlock()
+		o.nanos[nano.Id] = nano
+	}()
 
 	err = o.guide.tiny.NanoLocalRegister(nano)
 
@@ -151,6 +186,28 @@ func (o *unit) nanoLocalRegister(L *lua.State) int {
 
 }
 
-func (o *unit) stop() {
+func (o *luaunit) stop(lock bool) {
+
+	if lock {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+	}
+
+	if o.L != nil {
+		o.L.Close()
+		o.L = nil
+	}
+
+	if o.nanos != nil {
+		func() {
+			o.nanoMutex.Lock()
+			defer o.nanoMutex.Unlock()
+			for _, nano := range o.nanos {
+				if err := o.guide.tiny.NanoLocalUnregister(nano); err != nil {
+					o.logger.Println(err)
+				}
+			}
+		}()
+	}
 
 }
