@@ -193,7 +193,7 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 
 	box = &WatchBox{}
 	box.wtype = wtype
-	box.path = path
+	box.Path = path
 	box.routine = routine
 	box.control = make(chan bool, 2)
 	box.watcher = o

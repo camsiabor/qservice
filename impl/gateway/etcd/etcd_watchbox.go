@@ -1,11 +1,10 @@
-package zookeeper
+package etcd
 
 import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/util"
 	"log"
-	"time"
 )
 
 type WatchType int
@@ -16,7 +15,7 @@ const (
 	WatchTypeChildren WatchType = 3
 )
 
-type WatchRoutine func(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool
+type WatchRoutine func(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *EtcdWatcher, err error) bool
 
 type WatchBox struct {
 	wtype WatchType
@@ -27,7 +26,7 @@ type WatchBox struct {
 
 	control chan bool
 	routine WatchRoutine
-	watcher *ZooWatcher
+	watcher *EtcdWatcher
 }
 
 func (o *WatchBox) GetType() WatchType {
@@ -55,24 +54,13 @@ func (o *WatchBox) loop() {
 
 	for {
 
-		var connectChannel = o.watcher.WaitForConnected()
-		if connectChannel != nil {
-			var chosen, connected, recvok = util.Timeout(connectChannel, time.Duration(10)*time.Minute)
-			if chosen < 0 {
-				continue
-			}
-			if !connected.Bool() || !recvok {
-				break
-			}
-		}
-
 		switch o.wtype {
 		case WatchTypeGet:
-			data, stat, ch, err = o.watcher.conn.GetW(o.Path)
+			//data, stat, ch, err = o.watcher.conn.GetW(o.Path)
 		case WatchTypeExist:
-			data, stat, ch, err = o.watcher.conn.ExistsW(o.Path)
+			//data, stat, ch, err = o.watcher.conn.ExistsW(o.Path)
 		case WatchTypeChildren:
-			data, stat, ch, err = o.watcher.conn.ChildrenW(o.Path)
+			//data, stat, ch, err = o.watcher.conn.ChildrenW(o.Path)
 		}
 		if !o.run(&event, stat, data, err) {
 			break
