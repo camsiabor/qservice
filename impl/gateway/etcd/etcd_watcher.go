@@ -15,24 +15,30 @@ import (
 type EtcdConnectCallback func(event *zk.Event, watcher *EtcdWatcher, err error)
 
 type EtcdWatcher struct {
-	Id                string
-	Endpoints         []string
+	Id            string
+	Endpoints     []string
+	HeartbeatPath string
+
 	SessionTimeout    time.Duration
 	ReconnectInterval time.Duration
-	connectCallbacks  []EtcdConnectCallback
 
-	conn *clientv3.Client
+	Logger *log.Logger
+
+	connectCallbacks []EtcdConnectCallback
+
+	conn  *clientv3.Client
+	lease clientv3.Lease
 
 	mutex sync.RWMutex
 
 	watchMutex sync.RWMutex
 	watches    map[string]*WatchBox
 
-	connected bool
+	connected           bool
+	connectChannel      []chan bool
+	connectChannelMutex sync.Mutex
 
 	reconnectTimer *qroutine.Timer
-
-	Logger *log.Logger
 }
 
 func (o *EtcdWatcher) Start(config map[string]interface{}) error {
@@ -52,7 +58,7 @@ func (o *EtcdWatcher) Start(config map[string]interface{}) error {
 	}
 
 	if o.SessionTimeout <= 0 {
-		var timeout = util.GetInt64(config, 10, "session.timeout")
+		var timeout = util.GetInt64(config, 7, "session.timeout")
 		o.SessionTimeout = time.Duration(timeout) * time.Second
 	}
 
@@ -66,21 +72,48 @@ func (o *EtcdWatcher) Start(config map[string]interface{}) error {
 	}
 	if o.reconnectTimer == nil {
 		o.reconnectTimer = &qroutine.Timer{}
+		return o.reconnectTimer.Start(0, o.ReconnectInterval, o.connectLoop)
 	}
 
-	return o.reconnectTimer.Start(0, o.ReconnectInterval, o.reconnect)
-
+	return nil
 }
 
-func (o *EtcdWatcher) reconnect(timer *qroutine.Timer, err error) {
-	o.conn, err = clientv3.New(clientv3.Config{
-		Endpoints:   o.Endpoints,
-		DialTimeout: o.SessionTimeout,
-	})
-	if err == nil {
-		o.connected = true
-		timer.Stop()
+func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
+
+	if err != nil {
+		o.Logger.Println("etcd watcher reconnect error", err.Error())
+		return
 	}
+
+	if o.conn == nil {
+		func() {
+			o.conn, err = clientv3.New(clientv3.Config{
+				Endpoints:   o.Endpoints,
+				DialTimeout: o.SessionTimeout,
+			})
+
+			if err == nil {
+				o.connected = true
+				o.notifyConnected()
+			}
+		}()
+	}
+
+	if o.lease == nil {
+		o.lease = clientv3.NewLease(o.conn)
+	}
+
+	var ctx, _ = context.WithTimeout(context.TODO(), o.ReconnectInterval)
+	grant, err := o.lease.Grant(ctx, int64(o.ReconnectInterval/time.Second)+2)
+	if err != nil {
+		o.connected = false
+		o.Logger.Println(err)
+		return
+	}
+
+	ctx, _ = context.WithTimeout(context.TODO(), o.ReconnectInterval)
+	put, err := o.conn.Put(ctx, o.HeartbeatPath, "")
+	fmt.Println(grant.ID)
 
 }
 
@@ -88,6 +121,8 @@ func (o *EtcdWatcher) Stop(map[string]interface{}) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
+
+	o.notifyConnected(false)
 
 	if o.reconnectTimer != nil {
 		o.reconnectTimer.Stop()
@@ -179,4 +214,35 @@ func (o *EtcdWatcher) GetConn() *clientv3.Client {
 
 func (o *EtcdWatcher) IsConnected() bool {
 	return o.connected
+}
+
+func (o *EtcdWatcher) notifyConnected(value bool) {
+	if o.connectChannel == nil {
+		return
+	}
+	o.connectChannelMutex.Lock()
+	defer o.connectChannelMutex.Unlock()
+	if o.connectChannel == nil {
+		return
+	}
+	for _, ch := range o.connectChannel {
+		ch <- value
+		close(ch)
+	}
+	o.connectChannel = nil
+}
+
+func (o *EtcdWatcher) WaitForConnected() <-chan bool {
+	if o.IsConnected() {
+		return nil
+	}
+	var ch = make(chan bool)
+	o.connectChannelMutex.Lock()
+	defer o.connectChannelMutex.Unlock()
+	if o.connectChannel == nil {
+		o.connectChannel = []chan bool{ch}
+	} else {
+		o.connectChannel = append(o.connectChannel, ch)
+	}
+	return ch
 }

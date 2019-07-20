@@ -74,9 +74,13 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 	if o.conn != nil {
 		return fmt.Errorf("already connected")
 	}
-	o.reconnectTimer = &qroutine.Timer{}
-	return o.reconnectTimer.Start(0, o.ReconnectInterval, o.reconnect)
 
+	if o.reconnectTimer == nil {
+		o.reconnectTimer = &qroutine.Timer{}
+		return o.reconnectTimer.Start(0, o.ReconnectInterval, o.reconnect)
+	}
+
+	return nil
 }
 
 func (o *ZooWatcher) reconnect(timer *qroutine.Timer, err error) {
@@ -101,6 +105,11 @@ func (o *ZooWatcher) Stop(map[string]interface{}) error {
 	if o.conn != nil {
 		o.conn.Close()
 		o.connected = false
+	}
+
+	if o.reconnectTimer != nil {
+		o.reconnectTimer.Stop()
+		o.reconnectTimer = nil
 	}
 
 	o.notifyConnected(false)
