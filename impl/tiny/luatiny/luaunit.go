@@ -52,6 +52,10 @@ func (o *luaunit) start(restart bool) (err error) {
 		o.stop(false)
 	}
 
+	if !util.GetBool(o.config, true, "active") {
+		return nil
+	}
+
 	err = o.init(restart)
 	if err != nil {
 		return err
@@ -62,18 +66,22 @@ func (o *luaunit) start(restart bool) (err error) {
 	}
 
 	if len(o.main) == 0 {
-		return fmt.Errorf("main is not set in luaunit %v ", o.name)
+		return fmt.Errorf(o.string(), "main is not set")
 	}
 
 	o.path, err = filepath.Abs(o.guide.LuaPath + "/" + o.main)
 	if err != nil {
 		return err
 	}
+
 	_, err = RunLuaFile(o.L, o.main, func(L *lua.State, pan interface{}) {
 		err = util.AsError(pan)
 	})
 
 	o.err = err
+
+	o.logger.Println(o.string(), "start")
+
 	return err
 }
 
@@ -176,10 +184,10 @@ func (o *luaunit) nanoLocalRegister(L *lua.State) int {
 
 	if err == nil {
 		L.PushNil()
-		log.Println("lua service register", address)
+		o.logger.Println(o.string(), "lua nano register -> ", address)
 	} else {
 		L.PushString(err.Error())
-		log.Println("lua service register fail ", address, err.Error())
+		o.logger.Println(o.string(), "lua nano register fail -> ", address, err.Error())
 	}
 
 	return 1
@@ -193,21 +201,30 @@ func (o *luaunit) stop(lock bool) {
 		defer o.mutex.Unlock()
 	}
 
-	if o.L != nil {
-		o.L.Close()
-		o.L = nil
-	}
-
 	if o.nanos != nil {
 		func() {
 			o.nanoMutex.Lock()
 			defer o.nanoMutex.Unlock()
 			for _, nano := range o.nanos {
-				if err := o.guide.tiny.NanoLocalUnregister(nano); err != nil {
-					o.logger.Println(err)
+				var err = o.guide.tiny.NanoLocalUnregister(nano)
+				if err == nil {
+					o.logger.Println(o.string(), "lua nano unregister -> ", nano.Address)
+				} else {
+					o.logger.Println(o.string(), "lua nano unregister fail -> ", nano.Address, " : ", err.Error())
 				}
 			}
+			o.nanos = nil
 		}()
 	}
 
+	if o.L != nil {
+		o.L.Close()
+		o.L = nil
+	}
+
+	o.logger.Println(o.string(), "stop")
+}
+
+func (o *luaunit) string() string {
+	return fmt.Sprintf("[ %v @ %v # %v ]", o.guide.Name, o.name, o.path)
 }

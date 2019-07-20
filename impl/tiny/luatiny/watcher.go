@@ -28,25 +28,15 @@ func (o *LuaTinyGuide) watcherStart() {
 		o.watcherScript = &fswatcher.FsWatcher{}
 	}
 
-	/*
-		var watch = &fswatcher.FsWatch{
-			Path: o.ConfigPathAbs,
-			AsFile: true,
-			ReAddDelay: time.Second,
-			Handler: o.onConfigChange,
-		}
-
-		if err := o.watcherConfig.Add(watch); err != nil {
-			o.Logger.Println(err)
-		}
-	*/
-
-	_ = o.watcherConfig.Add(&fswatcher.FsWatch{
+	var err = o.watcherConfig.Add(&fswatcher.FsWatch{
 		Name:          filepath.Dir(o.ConfigPathAbs),
 		ReAddDelay:    time.Second,
 		CompressDelay: time.Second,
 		Handler:       o.onConfigChange,
 	})
+	if err != nil {
+		o.Logger.Println(err)
+	}
 
 	func() {
 		o.unitMutex.RLock()
@@ -95,11 +85,11 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 		}
 	}()
 
-	o.Logger.Println("[config] ", event.String())
-
 	if path != o.ConfigPathAbs {
 		return
 	}
+
+	o.Logger.Println("lua tiny config change ", event.String())
 
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -122,20 +112,26 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 
 	var changes = make(map[string]interface{})
 	for k, update := range config {
+
+		if k == "meta" {
+			continue
+		}
+
 		if update == nil {
-			changes[k] = make(map[string]interface{})
+			changes[k] = nil
 			continue
 		}
 		var current = o.Config[k]
 		if current == nil {
-			changes[k] = current
+			changes[k] = update
 			continue
 		}
 		var updateData, _ = json.Marshal(update)
 		var currentData, _ = json.Marshal(current)
+
 		if updateData == nil {
 			if currentData != nil {
-				changes[k] = make(map[string]interface{})
+				changes[k] = current
 			}
 			continue
 		}
@@ -145,17 +141,30 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 		}
 	}
 
+	for k := range o.Config {
+		if config[k] == nil || config[k] == false {
+			changes[k] = nil
+		}
+	}
+
 	for name, change := range changes {
-		var unit = o.getLuaunit(name)
+		o.Config[name] = change
+	}
+
+	for name, change := range changes {
+		var unit = o.luaunitGet(name, true)
+		unit.config = util.AsMap(change, false)
+		var active = util.GetBool(change, true, "active")
 		var main = util.GetStr(change, "", "main")
-		if len(main) == 0 {
+		if !active || len(main) == 0 {
 			if unit != nil {
-				unit.stop(true)
+				o.luaunitRemove(name)
 			}
 			continue
 		}
+		unit.main = main
 		if err = unit.start(true); err != nil {
-			o.Logger.Println(err)
+			o.Logger.Println(unit.string(), err.Error())
 		}
 	}
 
@@ -166,5 +175,6 @@ func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch 
 		o.Logger.Println(err)
 		return
 	}
+
 	o.Logger.Println(event.String())
 }

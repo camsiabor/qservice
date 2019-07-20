@@ -114,10 +114,10 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 			continue
 		}
 		var config = util.AsMap(v, true)
-		var one = o.getLuaunit(unitname)
-		one.config = config
-		if err := one.start(true); err != nil {
-			o.Logger.Printf("start lua unit %v fail %v", unitname, err.Error())
+		var unit = o.luaunitGet(unitname, true)
+		unit.config = config
+		if err := unit.start(true); err != nil {
+			o.Logger.Println(unit.string(), "start fail", err.Error())
 		}
 	}
 
@@ -148,7 +148,7 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 
 }
 
-func (o *LuaTinyGuide) getLuaunit(name string) *luaunit {
+func (o *LuaTinyGuide) luaunitGet(name string, create bool) *luaunit {
 
 	if o.units == nil {
 		func() {
@@ -171,6 +171,10 @@ func (o *LuaTinyGuide) getLuaunit(name string) *luaunit {
 		return one
 	}
 
+	if !create {
+		return nil
+	}
+
 	one = &luaunit{}
 	one.guide = o
 	one.name = name
@@ -183,4 +187,30 @@ func (o *LuaTinyGuide) getLuaunit(name string) *luaunit {
 	}()
 
 	return one
+}
+
+func (o *LuaTinyGuide) luaunitRemove(name string) {
+
+	func() {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+		delete(o.Config, name)
+	}()
+
+	o.unitMutex.Lock()
+	defer o.unitMutex.Unlock()
+
+	if o.units == nil {
+		return
+	}
+
+	var unit = o.units[name]
+	if unit == nil {
+		return
+	}
+
+	unit.stop(true)
+
+	delete(o.units, name)
+
 }
