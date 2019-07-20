@@ -28,6 +28,7 @@ func (o *luaunit) init(restart bool) (err error) {
 	err = o.L.TableRegisters("qtiny", map[string]interface{}{
 
 		// life cycle
+		"AddTimer":        o.addTimer,
 		"AddCloseHandler": lua.AddCloseHandlerDefault,
 
 		// service
@@ -39,6 +40,15 @@ func (o *luaunit) init(restart bool) (err error) {
 
 	return err
 }
+
+/* ===================== life cycle ==================== */
+
+func (o *luaunit) addTimer(L *lua.State) int {
+
+	return 0
+}
+
+/* ===================== message ==================== */
 
 func (o *luaunit) messageReply(L *lua.State) int {
 	var ptrvalue = L.ToInteger(1)
@@ -54,6 +64,8 @@ func (o *luaunit) messageReply(L *lua.State) int {
 	}
 	return 1
 }
+
+/* ===================== service ==================== */
 
 func (o *luaunit) nanoLocalRegister(L *lua.State) int {
 
