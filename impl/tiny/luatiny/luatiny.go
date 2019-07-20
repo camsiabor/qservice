@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type LuaTinyGuide struct {
@@ -21,8 +22,9 @@ type LuaTinyGuide struct {
 	ConfigPathAbs string
 	Config        map[string]interface{}
 
-	LuaPath  string
-	LuaCPath string
+	LuaPath     string
+	LuaCPath    string
+	ReloadDelay time.Duration
 
 	Logger *log.Logger
 
@@ -67,6 +69,10 @@ func (o *LuaTinyGuide) parseMeta(meta map[string]interface{}) (err error) {
 			return err
 		}
 	}
+
+	var reloadDelay = util.GetInt64(meta, 1000, "reload.delay")
+	o.ReloadDelay = time.Duration(reloadDelay) * time.Millisecond
+
 	return nil
 }
 
