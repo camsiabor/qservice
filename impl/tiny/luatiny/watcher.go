@@ -46,10 +46,11 @@ func (o *LuaTinyGuide) watcherStart() {
 				continue
 			}
 			var watch = &fswatcher.FsWatch{
-				Path:       v.path,
-				AsFile:     true,
-				ReAddDelay: time.Second,
-				Handler:    o.onScriptChange,
+				Path:          v.path,
+				AsFile:        true,
+				ReAddDelay:    time.Second,
+				CompressDelay: time.Second,
+				Handler:       o.onScriptChange,
 			}
 			if err := o.watcherScript.Add(watch); err != nil {
 				o.Logger.Println(err)
@@ -89,7 +90,7 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 		return
 	}
 
-	o.Logger.Println("lua tiny config change ", event.String())
+	o.Logger.Println("[lua tiny config change]", event.String())
 
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -176,5 +177,24 @@ func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch 
 		return
 	}
 
-	o.Logger.Println(event.String())
+	if path != watch.Path {
+		return
+	}
+
+	o.Logger.Println("[lua tiny script change]", event.String())
+
+	o.unitMutex.Lock()
+	defer o.unitMutex.Unlock()
+
+	for _, unit := range o.units {
+		if unit.path == path {
+			if unit.L != nil {
+				var err = unit.start(true)
+				if err != nil {
+					o.Logger.Println(unit.string(), "start fail", err.Error())
+				}
+			}
+		}
+	}
+
 }
