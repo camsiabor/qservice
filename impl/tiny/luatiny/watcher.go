@@ -31,7 +31,7 @@ func (o *LuaTinyGuide) watcherStart() {
 	var err = o.watcherConfig.Add(&fswatcher.FsWatch{
 		Name:          filepath.Dir(o.ConfigPathAbs),
 		ReAddDelay:    time.Second,
-		CompressDelay: time.Second,
+		CompressDelay: o.ReloadDelay,
 		Handler:       o.onConfigChange,
 	})
 	if err != nil {
@@ -49,7 +49,7 @@ func (o *LuaTinyGuide) watcherStart() {
 				Path:          v.path,
 				AsFile:        true,
 				ReAddDelay:    time.Second,
-				CompressDelay: time.Second,
+				CompressDelay: o.ReloadDelay,
 				Handler:       o.onScriptChange,
 			}
 			if err := o.watcherScript.Add(watch); err != nil {

@@ -204,9 +204,6 @@ func (o *FsWatcher) handle(watch *FsWatch, event *fsnotify.Event) {
 
 	defer func() {
 		var pan = recover()
-		if pan == nil {
-			return
-		}
 
 		if watch.ReAddDelay > 0 {
 			go func() {
@@ -216,7 +213,10 @@ func (o *FsWatcher) handle(watch *FsWatch, event *fsnotify.Event) {
 				}
 			}()
 		}
-		watch.Handler(event, path, watch, o, util.AsError(pan))
+
+		if pan != nil {
+			watch.Handler(event, path, watch, o, util.AsError(pan))
+		}
 	}()
 
 	watch.Handler(event, path, watch, o, nil)
