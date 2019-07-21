@@ -54,6 +54,20 @@ func NewNano(address string, flag NanoFlag, options NanoOptions, handler NanoHan
 	return nano
 }
 
+func CloneNano(nano *Nano) *Nano {
+	if nano == nil {
+		panic("invalid argument nil nano")
+	}
+	return &Nano{
+		Id:        nano.Id,
+		Flag:      nano.Flag,
+		Address:   nano.Address,
+		Options:   nano.Options,
+		Handler:   nano.Handler,
+		callbacks: nano.callbacks,
+	}
+}
+
 /* ====================================== handling ==================================== */
 
 func (o *Nano) Handle(message *Message) {

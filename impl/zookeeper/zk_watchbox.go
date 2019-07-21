@@ -3,6 +3,7 @@ package zookeeper
 import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
+	"github.com/camsiabor/qcom/qchan"
 	"github.com/camsiabor/qcom/util"
 	"log"
 	"time"
@@ -57,7 +58,7 @@ func (o *WatchBox) loop() {
 
 		var connectChannel = o.watcher.WaitForConnected()
 		if connectChannel != nil {
-			var chosen, connected, recvok = util.Timeout(connectChannel, time.Duration(10)*time.Minute)
+			var chosen, connected, recvok = qchan.Timeout(connectChannel, time.Duration(10)*time.Minute)
 			if chosen < 0 {
 				continue
 			}

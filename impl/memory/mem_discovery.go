@@ -65,8 +65,8 @@ func (o *MemDiscovery) NanoRemoteRegister(nano *qtiny.Nano) error {
 	}
 	var service = o.Remotes[nano.Address]
 	if service == nil {
-		service.Address = nano.Address
-		o.Remotes[nano.Address] = nano
+		service = qtiny.CloneNano(nano)
+		o.Remotes[service.Address] = service
 	}
 	return nil
 }
@@ -98,8 +98,8 @@ func (o *MemDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
 	}
 	var service = o.Locals[nano.Address]
 	if service == nil {
-		service.Address = nano.Address
-		o.Locals[nano.Address] = nano
+		service = qtiny.CloneNano(nano)
+		o.Locals[service.Address] = service
 	}
 	return nil
 }
