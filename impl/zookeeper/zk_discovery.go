@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
+	"github.com/camsiabor/qcom/qstr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
@@ -232,16 +233,15 @@ func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, d
 	if !ok {
 		return true
 	}
-	var address = box.Path
-
-	nano, _ := o.NanoRemoteGet(address)
+	var address = qstr.SubLast(box.Path, "/")
+	nano, _ := o.MemDiscovery.NanoRemoteGet(address)
 	if nano == nil {
-		err = o.NanoRemoteRegister(&qtiny.Nano{Address: address})
+		err = o.MemDiscovery.NanoRemoteRegister(&qtiny.Nano{Address: address})
 		if err != nil {
 			o.Logger.Println(err)
 			return true
 		}
-		nano, _ = o.NanoRemoteGet(address)
+		nano, _ = o.MemDiscovery.NanoRemoteGet(address)
 	}
 	if nano != nil {
 		nano.RemoteSet(children, nil)

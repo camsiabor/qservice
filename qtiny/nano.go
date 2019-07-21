@@ -164,6 +164,7 @@ func (o *Nano) RemoteSet(address []string, data []interface{}) {
 	}
 	o.remoteMap = m
 	o.remoteArray = address
+	o.remoteCount = len(o.remoteArray)
 }
 
 func (o *Nano) RemoteAdd(address string, data interface{}) {
@@ -184,7 +185,7 @@ func (o *Nano) RemoteAdd(address string, data interface{}) {
 		o.remoteMap = make(map[string]interface{})
 	}
 	o.remoteMap[address] = data
-	o.remoteCount = o.remoteCount + 1
+	o.remoteCount = len(o.remoteArray)
 }
 
 func (o *Nano) RemoteRemove(address string) {
@@ -216,7 +217,7 @@ func (o *Nano) RemoteRemove(address string) {
 	if o.remoteMap != nil {
 		delete(o.remoteMap, address)
 	}
-	o.remoteCount = o.remoteCount - 1
+	o.remoteCount = len(o.remoteArray)
 }
 
 func (o *Nano) RemoteAddresses() []string {
