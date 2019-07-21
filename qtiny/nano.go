@@ -228,8 +228,9 @@ func (o *Nano) RemoteAddress(index int32) string {
 		return ""
 	}
 	if index < 0 || int(index) >= o.remoteCount {
-		index = o.remoteIndex
-		if int(atomic.AddInt32(&o.remoteIndex, 1)) >= o.remoteCount {
+		index = atomic.AddInt32(&o.remoteIndex, 1)
+		if int(index) >= o.remoteCount {
+			index = 0
 			o.remoteIndex = 0
 		}
 	}

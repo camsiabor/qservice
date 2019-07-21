@@ -143,12 +143,16 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 	if err != nil {
 		return nil, err
 	}
-	if remote == nil || remote.RemoteAddresses() == nil {
-		remote = &qtiny.Nano{Address: address}
-		err = o.MemDiscovery.NanoRemoteRegister(remote)
+
+	if remote == nil {
+		err = o.MemDiscovery.NanoRemoteRegister(&qtiny.Nano{Address: address})
+		remote, err = o.MemDiscovery.NanoRemoteGet(address)
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if remote.RemoteAddresses() == nil {
 
 		var nanoZNodePath = o.GetNanoZNodePath(address)
 		var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
