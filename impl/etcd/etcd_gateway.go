@@ -3,8 +3,6 @@ package etcd
 import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
-	"github.com/camsiabor/qcom/qroutine"
-	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
@@ -12,7 +10,6 @@ import (
 	"golang.org/x/net/context"
 	"os"
 	"sync"
-	"time"
 )
 
 type EtcdGateway struct {
@@ -24,8 +21,6 @@ type EtcdGateway struct {
 	pathNodeConnection string
 
 	consumeSemaphore sync.WaitGroup
-
-	timer *qroutine.Timer
 }
 
 const PathNodeQueue = "/qnode"
@@ -53,14 +48,6 @@ func (o *EtcdGateway) Init(config map[string]interface{}) error {
 
 	o.watcher.AddConnectCallback(o.handleConnectionEvents)
 
-	if o.timer != nil {
-		o.timer.Stop()
-	}
-
-	var scanInterval = util.GetInt(config, 3*60, "scan.interval")
-
-	o.timer = &qroutine.Timer{}
-	err = o.timer.Start(0, time.Duration(scanInterval)*time.Second, o.timerloop)
 	return err
 }
 
@@ -79,10 +66,6 @@ func (o *EtcdGateway) Start(config map[string]interface{}) error {
 }
 
 func (o *EtcdGateway) Stop(config map[string]interface{}) error {
-
-	if o.timer != nil {
-		o.timer.Stop()
-	}
 
 	if o.watcher != nil {
 		var err = o.watcher.Stop(config)
@@ -123,53 +106,11 @@ func (o *EtcdGateway) handleConnectionEvents(event *zk.Event, watcher *EtcdWatch
 
 		//o.watcher.Watch(zookeeper.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
-		go func() {
-			for i := 0; i < 3; i++ {
-				o.nanoLocalPublishRegistries()
-				time.Sleep(o.watcher.SessionTimeout + time.Second)
-			}
-		}()
-
-		o.timer.Wake()
-
 		if o.Logger != nil {
-			o.Logger.Println("zk gate connected setup fin")
+			o.Logger.Println("etcd gateway connected setup fin")
 		}
 
 	}
-}
-
-func (o *EtcdGateway) loop() {
-	var ok bool
-	var msg *qtiny.Message
-	for {
-		select {
-		case msg, ok = <-o.Queue:
-			if !ok {
-				break
-			}
-			if o.Listeners == nil {
-				continue
-			}
-		}
-		if msg != nil {
-			var n = len(o.Listeners)
-			for i := 0; i < n; i++ {
-				o.Listeners[i] <- msg
-			}
-		}
-	}
-}
-
-func (o *EtcdGateway) timerloop(timer *qroutine.Timer, err error) {
-	if err != nil {
-		return
-	}
-	var ch = o.watcher.WaitForConnected()
-	if ch != nil {
-		<-ch
-	}
-	o.nanoLocalPublishRegistries()
 }
 
 func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {
@@ -219,13 +160,16 @@ func (o *EtcdGateway) Post(message *qtiny.Message) error {
 	}
 
 	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
-		var subscriber = o.Locals[message.Address]
-		if subscriber != nil {
+		var local, err = o.Discovery.NanoLocalGet(message.Address)
+		if err != nil {
+			return err
+		}
+		if local != nil {
 			return o.MemGateway.Post(message)
 		}
 	}
 
-	var data, err = message.ToJson()
+	data, err := message.ToJson()
 	if err != nil {
 		return err
 	}
@@ -234,26 +178,15 @@ func (o *EtcdGateway) Post(message *qtiny.Message) error {
 		return o.publish(message.Address, "/r", data)
 	}
 
-	var nano = o.RemoteGet(message.Address)
-	if nano == nil || nano.RemoteAddresses() == nil {
-		nano = o.NanoRemoteRegister(message.Address)
-		var nanoZNodePath = o.GetNanoZNodePath(message.Address)
-		fmt.Println(nanoZNodePath)
-		// TODO
-		//var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
-		var children []string
-		if err != nil {
-			return fmt.Errorf("no consumer found : " + err.Error())
-		}
-		// TODO
-		//o.watcher.Watch(zookeeper.WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
-		if children == nil || len(children) == 0 {
-			return fmt.Errorf("no consumer found for " + message.Address)
-		}
-		for i := 0; i < len(children); i++ {
-			nano.RemoteAdd(children[i], children[i])
-		}
+	nano, err := o.Discovery.NanoRemoteGet(message.Address)
+	if err != nil {
+		return err
 	}
+
+	if nano == nil {
+		o.Logger.Printf("discovery return nil nano %v", o.Discovery)
+	}
+
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
 		var consumerAddresses = nano.RemoteAddresses()
 		for i := 0; i < len(consumerAddresses); i++ {
@@ -273,80 +206,6 @@ func (o *EtcdGateway) Post(message *qtiny.Message) error {
 func (o *EtcdGateway) Broadcast(message *qtiny.Message) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
 	return o.Post(message)
-}
-
-func (o *EtcdGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
-	var parent = o.GetNanoZNodePath(nano.Address)
-	var _, err = o.watcher.Create(parent, "", 0)
-	if err != nil {
-		if o.Logger != nil {
-			o.Logger.Println("nano register fail ", parent, " : ", err.Error())
-		}
-		return err
-	}
-	var path = o.GetNanoZNodeSelfPath(nano.Address)
-	var exist, cerr = o.watcher.Create(path, "", zk.FlagEphemeral)
-	if !exist && o.Logger != nil {
-		if cerr == nil {
-			o.Logger.Println("nano register ", path)
-		} else {
-			o.Logger.Println("nano register fail ", path, " : ", cerr.Error())
-		}
-	}
-	return cerr
-}
-
-func (o *EtcdGateway) nanoLocalPublishRegistries() {
-	if o.Locals == nil {
-		return
-	}
-	o.LocalsMutex.RLock()
-	defer o.LocalsMutex.RUnlock()
-	for _, subscriber := range o.Locals {
-		go o.nanoLocalPublishRegistry(subscriber)
-	}
-}
-
-func (o *EtcdGateway) NanoLocalRegister(nano *qtiny.Nano) error {
-
-	if nano.Flag&qtiny.NanoFlagLocalOnly > 0 {
-		return o.MemGateway.NanoLocalRegister(nano)
-	}
-
-	o.LocalAdd(nano)
-	if o.watcher.IsConnected() {
-		go o.nanoLocalPublishRegistry(nano)
-	}
-	return nil
-}
-
-func (o *EtcdGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
-	// TODO implementation
-	return nil
-}
-
-func (o *EtcdGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *EtcdWatcher, err error) bool {
-	if err != nil && o.Logger != nil {
-		o.Logger.Println("nano registry watch error", err.Error())
-		return true
-	}
-	if data == nil {
-		return true
-	}
-	var children, ok = data.([]string)
-	if o.Logger != nil {
-		o.Logger.Println("remote consumer changes", box.Path, children)
-	}
-	if !ok {
-		return true
-	}
-	var address = box.Path
-	var nano = o.RemoteGet(address)
-	if nano == nil {
-		nano = o.NanoRemoteRegister(address)
-	}
-	nano.RemoteSet(children, nil)
-	return true
 }
 
 func (o *EtcdGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *EtcdWatcher, err error) bool {

@@ -144,7 +144,12 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 		return nil, err
 	}
 	if remote == nil || remote.RemoteAddresses() == nil {
-		remote = o.MemDiscovery.NanoRemoteRegister(address)
+		remote = &qtiny.Nano{Address: address}
+		err = o.MemDiscovery.NanoRemoteRegister(remote)
+		if err != nil {
+			return nil, err
+		}
+
 		var nanoZNodePath = o.GetNanoZNodePath(address)
 		var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
 		if err != nil {
@@ -159,10 +164,6 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 		}
 	}
 	return remote, nil
-}
-
-func (o *ZooDiscovery) NanoRemoteRegister(nano *qtiny.Nano) error {
-	panic("implement me")
 }
 
 /* ================================== local ============================================= */
@@ -212,15 +213,6 @@ func (o *ZooDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *ZooDiscovery) NanoLocalGet(address string) (*qtiny.Nano, error) {
-
-}
-
-func (o *ZooDiscovery) NanoLocalUnregister(nano *qtiny.Nano) error {
-	// TODO implementation
-	return nil
-}
-
 func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("nano registry watch error", err.Error())
@@ -237,11 +229,19 @@ func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, d
 		return true
 	}
 	var address = box.Path
-	var nano = o.NanoRemoteGet(address)
+
+	nano, _ := o.NanoRemoteGet(address)
 	if nano == nil {
-		nano = o.NanoRemoteRegister(address)
+		err = o.NanoRemoteRegister(&qtiny.Nano{Address: address})
+		if err != nil {
+			o.Logger.Println(err)
+			return true
+		}
+		nano, _ = o.NanoRemoteGet(address)
 	}
-	nano.RemoteSet(children, nil)
+	if nano != nil {
+		nano.RemoteSet(children, nil)
+	}
 	return true
 }
 

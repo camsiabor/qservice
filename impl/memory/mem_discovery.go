@@ -54,23 +54,31 @@ func (o *MemDiscovery) Start(config map[string]interface{}) error {
 
 func (o *MemDiscovery) Stop(map[string]interface{}) error {
 	o.Looping = false
-
 	return nil
 }
 
-func (o *MemDiscovery) NanoRemoteRegister(address string) *qtiny.Nano {
+func (o *MemDiscovery) NanoRemoteRegister(nano *qtiny.Nano) error {
 	o.RemotesMutex.Lock()
 	defer o.RemotesMutex.Unlock()
 	if o.Remotes == nil {
 		o.Remotes = make(map[string]*qtiny.Nano)
 	}
-	var service = o.Remotes[address]
+	var service = o.Remotes[nano.Address]
 	if service == nil {
-		service = &qtiny.Nano{}
-		service.Address = address
-		o.Remotes[address] = service
+		service.Address = nano.Address
+		o.Remotes[nano.Address] = nano
 	}
-	return service
+	return nil
+}
+
+func (o *MemDiscovery) NanoRemoteUnregister(nano *qtiny.Nano) error {
+	if o.Remotes == nil || nano == nil {
+		return nil
+	}
+	o.RemotesMutex.Lock()
+	defer o.RemotesMutex.Unlock()
+	delete(o.Remotes, nano.Address)
+	return nil
 }
 
 func (o *MemDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
@@ -83,15 +91,36 @@ func (o *MemDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 }
 
 func (o *MemDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
+	o.LocalsMutex.Lock()
+	defer o.LocalsMutex.Unlock()
+	if o.Locals == nil {
+		o.Locals = make(map[string]*qtiny.Nano)
+	}
+	var service = o.Locals[nano.Address]
+	if service == nil {
+		service.Address = nano.Address
+		o.Locals[nano.Address] = nano
+	}
 	return nil
 }
 
 func (o *MemDiscovery) NanoLocalUnregister(nano *qtiny.Nano) error {
+	if o.Locals == nil || nano == nil {
+		return nil
+	}
+	o.LocalsMutex.Lock()
+	defer o.LocalsMutex.Unlock()
+	delete(o.Locals, nano.Address)
 	return nil
 }
 
-func (o *MemDiscovery) NanoQuery(message *qtiny.Message) *qtiny.Nano {
-	return nil
+func (o *MemDiscovery) NanoLocalGet(address string) (*qtiny.Nano, error) {
+	o.LocalsMutex.RLock()
+	defer o.LocalsMutex.RUnlock()
+	if o.Locals == nil {
+		return nil, nil
+	}
+	return o.Locals[address], nil
 }
 
 /* ====================================== subscribers ===================================== */
@@ -104,12 +133,12 @@ func (o *MemDiscovery) NanoLocalAdd(nano *qtiny.Nano) {
 		o.Locals = make(map[string]*qtiny.Nano)
 	}
 
-	var subscriber = o.Locals[nano.Address]
-	if subscriber == nil {
-		subscriber = &qtiny.Nano{}
-		subscriber.Address = nano.Address
-		subscriber.Options = nano.Options
-		o.Locals[nano.Address] = subscriber
+	var local = o.Locals[nano.Address]
+	if local == nil {
+		local = &qtiny.Nano{}
+		local.Address = nano.Address
+		local.Options = nano.Options
+		o.Locals[nano.Address] = local
 	}
 }
 

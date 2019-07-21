@@ -11,8 +11,9 @@ type Discovery interface {
 	Start(config map[string]interface{}) error
 	Stop(config map[string]interface{}) error
 
-	NanoRemoteGet(address string) (*Nano, error)
 	NanoRemoteRegister(nano *Nano) error
+	NanoRemoteUnregister(nano *Nano) error
+	NanoRemoteGet(address string) (*Nano, error)
 
 	NanoLocalRegister(nano *Nano) error
 	NanoLocalUnregister(nano *Nano) error
