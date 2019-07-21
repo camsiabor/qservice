@@ -24,12 +24,6 @@ type MemGateway struct {
 	Listeners []chan *qtiny.Message
 
 	Discovery qtiny.Discovery
-
-	RemotesMutex sync.RWMutex
-	Remotes      map[string]*qtiny.Nano
-
-	LocalsMutex sync.RWMutex
-	Locals      map[string]*qtiny.Nano
 }
 
 func (o *MemGateway) Start(config map[string]interface{}) error {
@@ -41,10 +35,6 @@ func (o *MemGateway) Start(config map[string]interface{}) error {
 
 	if len(o.id) == 0 {
 		o.id = uuid.NewV4().String()
-	}
-
-	if o.Remotes == nil {
-		o.Remotes = make(map[string]*qtiny.Nano)
 	}
 
 	if o.Looping {
@@ -133,82 +123,6 @@ func (o *MemGateway) Post(message *qtiny.Message) error {
 func (o *MemGateway) Broadcast(message *qtiny.Message) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
 	return o.Post(message)
-}
-
-func (o *MemGateway) NanoRemoteRegister(address string) *qtiny.Nano {
-	o.RemotesMutex.Lock()
-	defer o.RemotesMutex.Unlock()
-	if o.Remotes == nil {
-		o.Remotes = make(map[string]*qtiny.Nano)
-	}
-	var service = o.Remotes[address]
-	if service == nil {
-		service = &qtiny.Nano{}
-		service.Address = address
-		o.Remotes[address] = service
-	}
-	return service
-}
-
-func (o *MemGateway) RemoteGet(address string) *qtiny.Nano {
-	o.RemotesMutex.RLock()
-	defer o.RemotesMutex.RUnlock()
-	if o.Remotes == nil {
-		return nil
-	}
-	return o.Remotes[address]
-}
-
-func (o *MemGateway) NanoLocalRegister(nano *qtiny.Nano) error {
-	return nil
-}
-
-func (o *MemGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
-	return nil
-}
-
-func (o *MemGateway) NanoQuery(message *qtiny.Message) *qtiny.Nano {
-	return nil
-}
-
-/* ====================================== subscribers ===================================== */
-
-func (o *MemGateway) LocalAdd(nano *qtiny.Nano) {
-	o.LocalsMutex.Lock()
-	defer o.LocalsMutex.Unlock()
-	if o.Locals == nil {
-		o.Locals = make(map[string]*qtiny.Nano)
-	}
-
-	var subscriber = o.Locals[nano.Address]
-	if subscriber == nil {
-		subscriber = &qtiny.Nano{}
-		subscriber.Address = nano.Address
-		subscriber.Options = nano.Options
-		o.Locals[nano.Address] = subscriber
-	}
-}
-
-func (o *MemGateway) LocalRemove(address string) {
-	if o.Locals == nil {
-		return
-	}
-	o.LocalsMutex.Lock()
-	defer o.LocalsMutex.Unlock()
-	delete(o.Locals, address)
-}
-
-func (o *MemGateway) LocalAll() map[string]*qtiny.Nano {
-	if o.Locals == nil {
-		return nil
-	}
-	var m = map[string]*qtiny.Nano{}
-	o.LocalsMutex.RLock()
-	defer o.LocalsMutex.RUnlock()
-	for k, v := range o.Locals {
-		m[k] = v
-	}
-	return m
 }
 
 /* ============================================================================================= */

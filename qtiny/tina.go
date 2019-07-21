@@ -21,6 +21,7 @@ type Tina struct {
 	tinys     map[string]*Tiny
 
 	gateway     Gateway
+	discovery   Discovery
 	microroller *Microroller
 
 	config map[string]interface{}
@@ -47,7 +48,7 @@ func (o *Tina) Start(config map[string]interface{}) error {
 		return err
 	}
 	var gatewayConfig = util.GetMap(o.config, true, "gateway")
-	err = o.initGateway(gatewayConfig)
+	err = o.initMicroroller(gatewayConfig)
 	return err
 }
 
@@ -68,25 +69,45 @@ func (o *Tina) initLogger(map[string]interface{}) error {
 	return nil
 }
 
-func (o *Tina) initGateway(config map[string]interface{}) error {
+func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
 	if o.gateway == nil {
-		panic("gateway is not set yet")
+		panic("gateway is not set")
 	}
 
 	if o.gateway.GetLogger() == nil {
 		o.gateway.SetLogger(o.logger)
 	}
-	if err := o.gateway.Start(config); err != nil {
-		return err
+
+	if o.discovery == nil {
+		panic("discovery is not set")
 	}
+
+	if o.discovery.GetLogger() == nil {
+		o.discovery.SetLogger(o.logger)
+	}
+
+	o.gateway.SetDiscovery(o.discovery)
+
 	if o.microroller == nil {
 		o.microroller = &Microroller{}
 	}
+
 	if o.microroller.GetLogger() == nil {
 		o.microroller.SetLogger(o.logger)
 	}
+
 	o.microroller.SetGateway(o.gateway)
+	o.microroller.SetDiscovery(o.discovery)
+
+	if err := o.discovery.Start(config); err != nil {
+		return err
+	}
+
+	if err := o.gateway.Start(config); err != nil {
+		return err
+	}
+
 	return o.microroller.Start(config)
 }
 
@@ -167,6 +188,14 @@ func (o *Tina) SetGateway(gateway Gateway) *Tina {
 
 func (o *Tina) GetGateway() Gateway {
 	return o.gateway
+}
+
+func (o *Tina) GetDiscovery() Discovery {
+	return o.discovery
+}
+
+func (o *Tina) SetDiscovery(discovery Discovery) {
+	o.discovery = discovery
 }
 
 func (o *Tina) SetMicroroller(microroller *Microroller) *Tina {

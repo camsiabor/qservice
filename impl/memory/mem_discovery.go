@@ -20,11 +20,13 @@ type MemDiscovery struct {
 
 	Listeners []chan *qtiny.Message
 
-	ConsumerMutex sync.RWMutex
-	Consumers     map[string]*qtiny.Nano
+	Discovery qtiny.Discovery
 
-	SubscriberMutex sync.RWMutex
-	Subscribers     map[string]*qtiny.Nano
+	RemotesMutex sync.RWMutex
+	Remotes      map[string]*qtiny.Nano
+
+	LocalsMutex sync.RWMutex
+	Locals      map[string]*qtiny.Nano
 }
 
 func (o *MemDiscovery) Start(config map[string]interface{}) error {
@@ -38,8 +40,8 @@ func (o *MemDiscovery) Start(config map[string]interface{}) error {
 		o.id = uuid.NewV4().String()
 	}
 
-	if o.Consumers == nil {
-		o.Consumers = make(map[string]*qtiny.Nano)
+	if o.Remotes == nil {
+		o.Remotes = make(map[string]*qtiny.Nano)
 	}
 
 	if o.Looping {
@@ -52,31 +54,32 @@ func (o *MemDiscovery) Start(config map[string]interface{}) error {
 
 func (o *MemDiscovery) Stop(map[string]interface{}) error {
 	o.Looping = false
+
 	return nil
 }
 
 func (o *MemDiscovery) NanoRemoteRegister(address string) *qtiny.Nano {
-	o.ConsumerMutex.Lock()
-	defer o.ConsumerMutex.Unlock()
-	if o.Consumers == nil {
-		o.Consumers = make(map[string]*qtiny.Nano)
+	o.RemotesMutex.Lock()
+	defer o.RemotesMutex.Unlock()
+	if o.Remotes == nil {
+		o.Remotes = make(map[string]*qtiny.Nano)
 	}
-	var service = o.Consumers[address]
+	var service = o.Remotes[address]
 	if service == nil {
 		service = &qtiny.Nano{}
 		service.Address = address
-		o.Consumers[address] = service
+		o.Remotes[address] = service
 	}
 	return service
 }
 
-func (o *MemDiscovery) NanoRemoteGet(address string) *qtiny.Nano {
-	o.ConsumerMutex.RLock()
-	defer o.ConsumerMutex.RUnlock()
-	if o.Consumers == nil {
-		return nil
+func (o *MemDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
+	o.RemotesMutex.RLock()
+	defer o.RemotesMutex.RUnlock()
+	if o.Remotes == nil {
+		return nil, nil
 	}
-	return o.Consumers[address]
+	return o.Remotes[address], nil
 }
 
 func (o *MemDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
@@ -87,41 +90,46 @@ func (o *MemDiscovery) NanoLocalUnregister(nano *qtiny.Nano) error {
 	return nil
 }
 
+func (o *MemDiscovery) NanoQuery(message *qtiny.Message) *qtiny.Nano {
+	return nil
+}
+
 /* ====================================== subscribers ===================================== */
 
-func (o *MemDiscovery) SubscriberAdd(nano *qtiny.Nano) {
-	o.SubscriberMutex.Lock()
-	defer o.SubscriberMutex.Unlock()
-	if o.Subscribers == nil {
-		o.Subscribers = make(map[string]*qtiny.Nano)
+func (o *MemDiscovery) NanoLocalAdd(nano *qtiny.Nano) {
+
+	o.LocalsMutex.Lock()
+	defer o.LocalsMutex.Unlock()
+	if o.Locals == nil {
+		o.Locals = make(map[string]*qtiny.Nano)
 	}
 
-	var subscriber = o.Subscribers[nano.Address]
+	var subscriber = o.Locals[nano.Address]
 	if subscriber == nil {
 		subscriber = &qtiny.Nano{}
 		subscriber.Address = nano.Address
 		subscriber.Options = nano.Options
-		o.Subscribers[nano.Address] = subscriber
+		o.Locals[nano.Address] = subscriber
 	}
 }
 
-func (o *MemDiscovery) SubscriberRemove(address string) {
-	if o.Subscribers == nil {
+func (o *MemDiscovery) NanoLocalRemove(address string) {
+	if o.Locals == nil {
 		return
 	}
-	o.SubscriberMutex.Lock()
-	defer o.SubscriberMutex.Unlock()
-	delete(o.Subscribers, address)
+	o.LocalsMutex.Lock()
+	defer o.LocalsMutex.Unlock()
+	delete(o.Locals, address)
 }
 
-func (o *MemDiscovery) GetSubscribers() map[string]*qtiny.Nano {
-	if o.Subscribers == nil {
+func (o *MemDiscovery) NanoLocalAll() map[string]*qtiny.Nano {
+	if o.Locals == nil {
 		return nil
 	}
 	var m = map[string]*qtiny.Nano{}
-	o.SubscriberMutex.RLock()
-	defer o.SubscriberMutex.RUnlock()
-	for k, v := range o.Subscribers {
+	o.LocalsMutex.RLock()
+	defer o.LocalsMutex.RUnlock()
+	for k, v := range o.Locals {
 		m[k] = v
 	}
 	return m
@@ -143,4 +151,12 @@ func (o *MemDiscovery) GetLogger() *log.Logger {
 
 func (o *MemDiscovery) SetLogger(logger *log.Logger) {
 	o.Logger = logger
+}
+
+func (o *MemDiscovery) GetDiscovery() qtiny.Discovery {
+	return o.Discovery
+}
+
+func (o *MemDiscovery) SetDiscovery(discovery qtiny.Discovery) {
+	o.Discovery = discovery
 }

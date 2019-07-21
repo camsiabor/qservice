@@ -14,4 +14,6 @@ type Gateway interface {
 	Poll(limit int) (chan *Message, error)
 	Post(message *Message) error
 	Broadcast(message *Message) error
+
+	SetDiscovery(discovery Discovery)
 }
