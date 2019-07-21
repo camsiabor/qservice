@@ -114,13 +114,13 @@ func (o *EGateway) handleConnectionEvents(event *zk.Event, watcher *EtcdWatcher,
 			o.connectId = hostname + ":" + uuid.NewV4().String()
 		}
 
-		_, _ = watcher.Create(PathNano, []byte(""), 0)
-		_, _ = watcher.Create(PathNodeQueue, []byte(""), 0)
-		_, _ = watcher.Create(PathConnection, []byte(""), 0)
+		_, _ = watcher.Create(PathNano, "", 0)
+		_, _ = watcher.Create(PathNodeQueue, "", 0)
+		_, _ = watcher.Create(PathConnection, "", 0)
 
-		_, _ = watcher.Create(o.pathNodeQueue, []byte(""), 0)
-		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0)
-		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), 0)
+		_, _ = watcher.Create(o.pathNodeQueue, "", 0)
+		_, _ = watcher.Create(o.pathNodeConnection, "", 0)
+		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, "", 0)
 
 		//o.watcher.Watch(zookeeper.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
@@ -196,7 +196,7 @@ func (o *EGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 func (o *EGateway) publish(consumerAddress string, prefix string, data []byte) error {
 	var uri = o.GetQueueZNodePath(consumerAddress)
-	var _, err = o.watcher.Create(uri+prefix, data, zk.FlagEphemeral|zk.FlagSequence)
+	var _, err = o.watcher.Create(uri+prefix, string(data), zk.FlagEphemeral|zk.FlagSequence)
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("publish error ", err.Error())
 	}
@@ -220,7 +220,7 @@ func (o *EGateway) Post(message *qtiny.Message) error {
 	}
 
 	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
-		var subscriber = o.Subscribers[message.Address]
+		var subscriber = o.Locals[message.Address]
 		if subscriber != nil {
 			return o.MGateway.Post(message)
 		}
@@ -235,7 +235,7 @@ func (o *EGateway) Post(message *qtiny.Message) error {
 		return o.publish(message.Address, "/r", data)
 	}
 
-	var nano = o.NanoRemoteGet(message.Address)
+	var nano = o.RemoteGet(message.Address)
 	if nano == nil || nano.RemoteAddresses() == nil {
 		nano = o.NanoRemoteRegister(message.Address)
 		var nanoZNodePath = o.GetNanoZNodePath(message.Address)
@@ -278,7 +278,7 @@ func (o *EGateway) Broadcast(message *qtiny.Message) error {
 
 func (o *EGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 	var parent = o.GetNanoZNodePath(nano.Address)
-	var _, err = o.watcher.Create(parent, []byte(""), 0)
+	var _, err = o.watcher.Create(parent, "", 0)
 	if err != nil {
 		if o.Logger != nil {
 			o.Logger.Println("nano register fail ", parent, " : ", err.Error())
@@ -286,7 +286,7 @@ func (o *EGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 		return err
 	}
 	var path = o.GetNanoZNodeSelfPath(nano.Address)
-	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral)
+	var exist, cerr = o.watcher.Create(path, "", zk.FlagEphemeral)
 	if !exist && o.Logger != nil {
 		if cerr == nil {
 			o.Logger.Println("nano register ", path)
@@ -298,12 +298,12 @@ func (o *EGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 }
 
 func (o *EGateway) nanoLocalPublishRegistries() {
-	if o.Subscribers == nil {
+	if o.Locals == nil {
 		return
 	}
-	o.SubscriberMutex.RLock()
-	defer o.SubscriberMutex.RUnlock()
-	for _, subscriber := range o.Subscribers {
+	o.LocalsMutex.RLock()
+	defer o.LocalsMutex.RUnlock()
+	for _, subscriber := range o.Locals {
 		go o.nanoLocalPublishRegistry(subscriber)
 	}
 }
@@ -314,7 +314,7 @@ func (o *EGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 		return o.MGateway.NanoLocalRegister(nano)
 	}
 
-	o.SubscriberAdd(nano)
+	o.LocalAdd(nano)
 	if o.watcher.IsConnected() {
 		go o.nanoLocalPublishRegistry(nano)
 	}
@@ -342,7 +342,7 @@ func (o *EGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 		return true
 	}
 	var address = box.Path
-	var nano = o.NanoRemoteGet(address)
+	var nano = o.RemoteGet(address)
 	if nano == nil {
 		nano = o.NanoRemoteRegister(address)
 	}

@@ -212,7 +212,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	}
 
 	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
-		var subscriber = o.Subscribers[message.Address]
+		var subscriber = o.Locals[message.Address]
 		if subscriber != nil {
 			return o.MGateway.Post(message)
 		}
@@ -227,7 +227,7 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 		return o.publish(message.Address, "/r", data)
 	}
 
-	var nano = o.NanoRemoteGet(message.Address)
+	var nano = o.RemoteGet(message.Address)
 	if nano == nil || nano.RemoteAddresses() == nil {
 		nano = o.NanoRemoteRegister(message.Address)
 		var nanoZNodePath = o.GetNanoZNodePath(message.Address)
@@ -286,12 +286,12 @@ func (o *ZGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 }
 
 func (o *ZGateway) nanoLocalPublishRegistries() {
-	if o.Subscribers == nil {
+	if o.Locals == nil {
 		return
 	}
-	o.SubscriberMutex.RLock()
-	defer o.SubscriberMutex.RUnlock()
-	for _, subscriber := range o.Subscribers {
+	o.LocalsMutex.RLock()
+	defer o.LocalsMutex.RUnlock()
+	for _, subscriber := range o.Locals {
 		go o.nanoLocalPublishRegistry(subscriber)
 	}
 }
@@ -302,7 +302,7 @@ func (o *ZGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 		return o.MGateway.NanoLocalRegister(nano)
 	}
 
-	o.SubscriberAdd(nano)
+	o.LocalAdd(nano)
 	if o.watcher.IsConnected() {
 		go o.nanoLocalPublishRegistry(nano)
 	}
@@ -330,7 +330,7 @@ func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 		return true
 	}
 	var address = box.Path
-	var nano = o.NanoRemoteGet(address)
+	var nano = o.RemoteGet(address)
 	if nano == nil {
 		nano = o.NanoRemoteRegister(address)
 	}

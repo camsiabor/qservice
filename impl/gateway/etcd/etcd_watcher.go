@@ -94,7 +94,7 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 
 			if err == nil {
 				o.connected = true
-				o.notifyConnected()
+				o.notifyConnected(true)
 			}
 		}()
 	}
@@ -112,8 +112,14 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 	}
 
 	ctx, _ = context.WithTimeout(context.TODO(), o.ReconnectInterval)
-	put, err := o.conn.Put(ctx, o.HeartbeatPath, "")
-	fmt.Println(grant.ID)
+	_, err = o.conn.Put(ctx, o.HeartbeatPath, "", clientv3.WithLease(grant.ID))
+	if err != nil {
+		o.connected = false
+		return
+	}
+
+	o.connected = true
+	o.notifyConnected(true)
 
 }
 
@@ -122,18 +128,18 @@ func (o *EtcdWatcher) Stop(map[string]interface{}) error {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	o.notifyConnected(false)
-
 	if o.reconnectTimer != nil {
 		o.reconnectTimer.Stop()
 	}
+
+	o.notifyConnected(false)
 
 	if o.conn == nil {
 		return fmt.Errorf("not connected yet")
 	}
 
 	if o.conn != nil {
-		o.conn.Close()
+		_ = o.conn.Close()
 		o.connected = false
 	}
 
@@ -162,7 +168,7 @@ func (o *EtcdWatcher) getWatch(wtype WatchType, path string, lock bool) *WatchBo
 	return o.watches[path]
 }
 
-func (o *EtcdWatcher) Watch(wtype WatchType, path string, data interface{}, routine WatchRoutine) {
+func (o *EtcdWatcher) Watch2(wtype WatchType, path string, data interface{}, routine WatchRoutine) {
 	var box = o.getWatch(wtype, path, true)
 	if box != nil {
 		box.routine = routine
@@ -193,18 +199,91 @@ func (o *EtcdWatcher) Watch(wtype WatchType, path string, data interface{}, rout
 	go box.loop()
 }
 
-func (o *EtcdWatcher) Create(path string, data []byte, createflags int32) (bool, error) {
+func (o *EtcdWatcher) GetContextWithTimeout(parent context.Context, timeout time.Duration) context.Context {
+	var ctx context.Context
+	if timeout <= 0 {
+		ctx = context.TODO()
+	} else {
+		if parent == nil {
+			parent = context.TODO()
+		}
+		ctx, _ = context.WithTimeout(parent, timeout)
+	}
+	return ctx
+}
 
-	get, err := o.conn.Get(context.TODO(), path)
+func (o *EtcdWatcher) Get(path string, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
+	if !o.connected {
+		return nil, fmt.Errorf("disconnected")
+	}
+	var ctx = o.GetContextWithTimeout(nil, timeout)
+	return o.conn.Get(ctx, path, opts...)
+}
+
+func (o *EtcdWatcher) Put(path string, val string, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.PutResponse, error) {
+	if !o.connected {
+		return nil, fmt.Errorf("disconnected")
+	}
+	var ctx = o.GetContextWithTimeout(nil, timeout)
+	return o.conn.Put(ctx, path, val, opts...)
+}
+
+func (o *EtcdWatcher) PutWithTTL(path string, val string, ttl int64, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.PutResponse, *clientv3.LeaseGrantResponse, error) {
+	if !o.connected {
+		return nil, nil, fmt.Errorf("disconnected")
+	}
+	var ctx = o.GetContextWithTimeout(nil, timeout)
+	var leaseresp, err = o.conn.Grant(ctx, ttl)
+	if err != nil {
+		return nil, nil, err
+	}
+	if opts == nil {
+		opts = []clientv3.OpOption{clientv3.WithLease(leaseresp.ID)}
+	} else {
+		opts = append(opts, clientv3.WithLease(leaseresp.ID))
+	}
+	ctx = o.GetContextWithTimeout(nil, timeout)
+	put, err := o.conn.Put(ctx, path, val, opts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return put, leaseresp, nil
+}
+
+func (o *EtcdWatcher) Delete(path string, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.DeleteResponse, error) {
+	if !o.connected {
+		return nil, fmt.Errorf("disconnected")
+	}
+	var ctx = o.GetContextWithTimeout(nil, timeout)
+	return o.conn.Delete(ctx, path, opts...)
+}
+
+func (o *EtcdWatcher) Compact(recv int64, timeout time.Duration, opts ...clientv3.CompactOption) (*clientv3.CompactResponse, error) {
+	if !o.connected {
+		return nil, fmt.Errorf("disconnected")
+	}
+	var ctx = o.GetContextWithTimeout(nil, timeout)
+	return o.conn.Compact(ctx, recv, opts...)
+}
+
+func (o *EtcdWatcher) Watch(path string, timeout time.Duration, opts ...clientv3.OpOption) clientv3.WatchChan {
+	if !o.connected {
+		return nil
+	}
+
+	var ctx = o.GetContextWithTimeout(nil, timeout)
+	return o.conn.Watch(ctx, path, opts...)
+}
+
+func (o *EtcdWatcher) Create(path string, data string, timeout time.Duration) (bool, error) {
+	get, err := o.Get(path, timeout, nil)
 	if err != nil {
 		return false, err
 	}
-
 	if get.Kvs != nil {
 		return true, nil
 	}
-
-	_, err = o.conn.Put(context.TODO(), path, string(data))
+	_, err = o.Put(path, data, timeout)
 	return false, err
 }
 

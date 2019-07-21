@@ -23,11 +23,13 @@ type MGateway struct {
 
 	Listeners []chan *qtiny.Message
 
-	ConsumerMutex sync.RWMutex
-	Consumers     map[string]*qtiny.Nano
+	Discovery qtiny.Discovery
 
-	SubscriberMutex sync.RWMutex
-	Subscribers     map[string]*qtiny.Nano
+	RemotesMutex sync.RWMutex
+	Remotes      map[string]*qtiny.Nano
+
+	LocalsMutex sync.RWMutex
+	Locals      map[string]*qtiny.Nano
 }
 
 func (o *MGateway) Start(config map[string]interface{}) error {
@@ -41,8 +43,8 @@ func (o *MGateway) Start(config map[string]interface{}) error {
 		o.id = uuid.NewV4().String()
 	}
 
-	if o.Consumers == nil {
-		o.Consumers = make(map[string]*qtiny.Nano)
+	if o.Remotes == nil {
+		o.Remotes = make(map[string]*qtiny.Nano)
 	}
 
 	if o.Looping {
@@ -134,27 +136,27 @@ func (o *MGateway) Broadcast(message *qtiny.Message) error {
 }
 
 func (o *MGateway) NanoRemoteRegister(address string) *qtiny.Nano {
-	o.ConsumerMutex.Lock()
-	defer o.ConsumerMutex.Unlock()
-	if o.Consumers == nil {
-		o.Consumers = make(map[string]*qtiny.Nano)
+	o.RemotesMutex.Lock()
+	defer o.RemotesMutex.Unlock()
+	if o.Remotes == nil {
+		o.Remotes = make(map[string]*qtiny.Nano)
 	}
-	var service = o.Consumers[address]
+	var service = o.Remotes[address]
 	if service == nil {
 		service = &qtiny.Nano{}
 		service.Address = address
-		o.Consumers[address] = service
+		o.Remotes[address] = service
 	}
 	return service
 }
 
-func (o *MGateway) NanoRemoteGet(address string) *qtiny.Nano {
-	o.ConsumerMutex.RLock()
-	defer o.ConsumerMutex.RUnlock()
-	if o.Consumers == nil {
+func (o *MGateway) RemoteGet(address string) *qtiny.Nano {
+	o.RemotesMutex.RLock()
+	defer o.RemotesMutex.RUnlock()
+	if o.Remotes == nil {
 		return nil
 	}
-	return o.Consumers[address]
+	return o.Remotes[address]
 }
 
 func (o *MGateway) NanoLocalRegister(nano *qtiny.Nano) error {
@@ -165,41 +167,45 @@ func (o *MGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
 	return nil
 }
 
+func (o *MGateway) NanoQuery(message *qtiny.Message) *qtiny.Nano {
+	return nil
+}
+
 /* ====================================== subscribers ===================================== */
 
-func (o *MGateway) SubscriberAdd(nano *qtiny.Nano) {
-	o.SubscriberMutex.Lock()
-	defer o.SubscriberMutex.Unlock()
-	if o.Subscribers == nil {
-		o.Subscribers = make(map[string]*qtiny.Nano)
+func (o *MGateway) LocalAdd(nano *qtiny.Nano) {
+	o.LocalsMutex.Lock()
+	defer o.LocalsMutex.Unlock()
+	if o.Locals == nil {
+		o.Locals = make(map[string]*qtiny.Nano)
 	}
 
-	var subscriber = o.Subscribers[nano.Address]
+	var subscriber = o.Locals[nano.Address]
 	if subscriber == nil {
 		subscriber = &qtiny.Nano{}
 		subscriber.Address = nano.Address
 		subscriber.Options = nano.Options
-		o.Subscribers[nano.Address] = subscriber
+		o.Locals[nano.Address] = subscriber
 	}
 }
 
-func (o *MGateway) SubscriberRemove(address string) {
-	if o.Subscribers == nil {
+func (o *MGateway) LocalRemove(address string) {
+	if o.Locals == nil {
 		return
 	}
-	o.SubscriberMutex.Lock()
-	defer o.SubscriberMutex.Unlock()
-	delete(o.Subscribers, address)
+	o.LocalsMutex.Lock()
+	defer o.LocalsMutex.Unlock()
+	delete(o.Locals, address)
 }
 
-func (o *MGateway) GetSubscribers() map[string]*qtiny.Nano {
-	if o.Subscribers == nil {
+func (o *MGateway) LocalAll() map[string]*qtiny.Nano {
+	if o.Locals == nil {
 		return nil
 	}
 	var m = map[string]*qtiny.Nano{}
-	o.SubscriberMutex.RLock()
-	defer o.SubscriberMutex.RUnlock()
-	for k, v := range o.Subscribers {
+	o.LocalsMutex.RLock()
+	defer o.LocalsMutex.RUnlock()
+	for k, v := range o.Locals {
 		m[k] = v
 	}
 	return m
@@ -221,4 +227,12 @@ func (o *MGateway) GetLogger() *log.Logger {
 
 func (o *MGateway) SetLogger(logger *log.Logger) {
 	o.Logger = logger
+}
+
+func (o *MGateway) GetDiscovery() qtiny.Discovery {
+	return o.Discovery
+}
+
+func (o *MGateway) SetDiscovery(discovery qtiny.Discovery) {
+	o.Discovery = discovery
 }
