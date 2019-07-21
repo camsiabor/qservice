@@ -6,7 +6,7 @@ import (
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
-	"go.etcd.io/etcd/clientv3"
+	v3 "go.etcd.io/etcd/clientv3"
 	"golang.org/x/net/context"
 	"os"
 	"sync"
@@ -238,7 +238,7 @@ func (o *EtcdGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data inte
 	return true
 }
 
-func (o *EtcdGateway) messageConsume(conn *clientv3.Client, root string, child string) {
+func (o *EtcdGateway) messageConsume(conn *v3.Client, root string, child string) {
 	defer o.consumeSemaphore.Done()
 	var path = root + "/" + child
 	var data, err = conn.Get(context.TODO(), path)
