@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-type MGateway struct {
+type MemDiscovery struct {
 	id  string
 	tag string
 
@@ -27,7 +27,7 @@ type MGateway struct {
 	Subscribers     map[string]*qtiny.Nano
 }
 
-func (o *MGateway) Start(config map[string]interface{}) error {
+func (o *MemDiscovery) Start(config map[string]interface{}) error {
 
 	var configId = util.GetStr(config, "", "id")
 	if len(configId) > 0 {
@@ -50,12 +50,12 @@ func (o *MGateway) Start(config map[string]interface{}) error {
 	return nil
 }
 
-func (o *MGateway) Stop(map[string]interface{}) error {
+func (o *MemDiscovery) Stop(map[string]interface{}) error {
 	o.Looping = false
 	return nil
 }
 
-func (o *MGateway) NanoRemoteRegister(address string) *qtiny.Nano {
+func (o *MemDiscovery) NanoRemoteRegister(address string) *qtiny.Nano {
 	o.ConsumerMutex.Lock()
 	defer o.ConsumerMutex.Unlock()
 	if o.Consumers == nil {
@@ -70,7 +70,7 @@ func (o *MGateway) NanoRemoteRegister(address string) *qtiny.Nano {
 	return service
 }
 
-func (o *MGateway) NanoRemoteGet(address string) *qtiny.Nano {
+func (o *MemDiscovery) NanoRemoteGet(address string) *qtiny.Nano {
 	o.ConsumerMutex.RLock()
 	defer o.ConsumerMutex.RUnlock()
 	if o.Consumers == nil {
@@ -79,17 +79,17 @@ func (o *MGateway) NanoRemoteGet(address string) *qtiny.Nano {
 	return o.Consumers[address]
 }
 
-func (o *MGateway) NanoLocalRegister(nano *qtiny.Nano) error {
+func (o *MemDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *MGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
+func (o *MemDiscovery) NanoLocalUnregister(nano *qtiny.Nano) error {
 	return nil
 }
 
 /* ====================================== subscribers ===================================== */
 
-func (o *MGateway) SubscriberAdd(nano *qtiny.Nano) {
+func (o *MemDiscovery) SubscriberAdd(nano *qtiny.Nano) {
 	o.SubscriberMutex.Lock()
 	defer o.SubscriberMutex.Unlock()
 	if o.Subscribers == nil {
@@ -105,7 +105,7 @@ func (o *MGateway) SubscriberAdd(nano *qtiny.Nano) {
 	}
 }
 
-func (o *MGateway) SubscriberRemove(address string) {
+func (o *MemDiscovery) SubscriberRemove(address string) {
 	if o.Subscribers == nil {
 		return
 	}
@@ -114,7 +114,7 @@ func (o *MGateway) SubscriberRemove(address string) {
 	delete(o.Subscribers, address)
 }
 
-func (o *MGateway) GetSubscribers() map[string]*qtiny.Nano {
+func (o *MemDiscovery) GetSubscribers() map[string]*qtiny.Nano {
 	if o.Subscribers == nil {
 		return nil
 	}
@@ -129,18 +129,18 @@ func (o *MGateway) GetSubscribers() map[string]*qtiny.Nano {
 
 /* ============================================================================================= */
 
-func (o *MGateway) GetId() string {
+func (o *MemDiscovery) GetId() string {
 	return o.id
 }
 
-func (o *MGateway) GetTag() string {
+func (o *MemDiscovery) GetTag() string {
 	return o.tag
 }
 
-func (o *MGateway) GetLogger() *log.Logger {
+func (o *MemDiscovery) GetLogger() *log.Logger {
 	return o.Logger
 }
 
-func (o *MGateway) SetLogger(logger *log.Logger) {
+func (o *MemDiscovery) SetLogger(logger *log.Logger) {
 	o.Logger = logger
 }

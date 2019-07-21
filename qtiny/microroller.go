@@ -17,7 +17,8 @@ type Microroller struct {
 
 	mutex sync.RWMutex
 
-	gateway Gateway
+	gateway   Gateway
+	discovery Discovery
 
 	queue   chan *Message
 	control chan string
@@ -172,7 +173,7 @@ func (o *Microroller) NanoLocalRegister(nano *Nano) error {
 		}
 	}()
 
-	return o.gateway.NanoLocalRegister(nano)
+	return o.discovery.NanoLocalRegister(nano)
 
 }
 
@@ -201,7 +202,7 @@ func (o *Microroller) NanoLocalUnregister(nano *Nano) error {
 		return err
 	}
 
-	return o.gateway.NanoLocalUnregister(nano)
+	return o.discovery.NanoLocalUnregister(nano)
 }
 
 func (o *Microroller) generateMessageId() uint64 {
@@ -267,6 +268,14 @@ func (o *Microroller) GetGateway() Gateway {
 func (o *Microroller) SetGateway(gateway Gateway) *Microroller {
 	o.gateway = gateway
 	return o
+}
+
+func (o *Microroller) GetDiscovery() Discovery {
+	return o.discovery
+}
+
+func (o *Microroller) SetDiscovery(discovery Discovery) {
+	o.discovery = discovery
 }
 
 func (o *Microroller) GetLogger() *log.Logger {

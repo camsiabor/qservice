@@ -1,21 +1,23 @@
-package zookeeper
+package etcd
 
 import (
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
-	"github.com/camsiabor/qservice/impl/gateway/memory"
+	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
+	"go.etcd.io/etcd/clientv3"
+	"golang.org/x/net/context"
 	"os"
 	"sync"
 	"time"
 )
 
-type ZGateway struct {
-	memory.MGateway
-	watcher *ZooWatcher
+type EtcdGateway struct {
+	memory.MemGateway
+	watcher *EtcdWatcher
 
 	connectId          string
 	pathNodeQueue      string
@@ -30,13 +32,17 @@ const PathNodeQueue = "/qnode"
 const PathNano = "/qnano"
 const PathConnection = "/qconn"
 
-func (o *ZGateway) Init(config map[string]interface{}) error {
+func (o *EtcdGateway) Init(config map[string]interface{}) error {
 
 	var err error
 
+	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
+	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
+
 	if o.watcher == nil {
-		o.watcher = &ZooWatcher{}
+		o.watcher = &EtcdWatcher{}
 		o.watcher.Logger = o.Logger
+		o.watcher.HeartbeatPath = o.pathNodeConnection
 	}
 
 	err = o.watcher.Start(config)
@@ -45,8 +51,6 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 		return err
 	}
 
-	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
-	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
 	o.watcher.AddConnectCallback(o.handleConnectionEvents)
 
 	if o.timer != nil {
@@ -60,34 +64,37 @@ func (o *ZGateway) Init(config map[string]interface{}) error {
 	return err
 }
 
-func (o *ZGateway) Start(config map[string]interface{}) error {
+func (o *EtcdGateway) Start(config map[string]interface{}) error {
 	var err error
 	defer func() {
 		if err != nil {
 			_ = o.Stop(config)
 		}
 	}()
-	err = o.MGateway.Start(config)
+	err = o.MemGateway.Start(config)
 	if err == nil {
 		err = o.Init(config)
 	}
 	return err
 }
 
-func (o *ZGateway) Stop(config map[string]interface{}) error {
+func (o *EtcdGateway) Stop(config map[string]interface{}) error {
+
 	if o.timer != nil {
 		o.timer.Stop()
 	}
+
 	if o.watcher != nil {
 		var err = o.watcher.Stop(config)
 		if err != nil {
 			return err
 		}
 	}
-	return o.MGateway.Stop(config)
+
+	return o.MemGateway.Stop(config)
 }
 
-func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, err error) {
+func (o *EtcdGateway) handleConnectionEvents(event *zk.Event, watcher *EtcdWatcher, err error) {
 
 	if event.State == zk.StateDisconnected {
 		if o.Logger != nil {
@@ -106,15 +113,15 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 			o.connectId = hostname + ":" + uuid.NewV4().String()
 		}
 
-		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(PathNano, "", 0)
+		_, _ = watcher.Create(PathNodeQueue, "", 0)
+		_, _ = watcher.Create(PathConnection, "", 0)
 
-		_, _ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeQueue, "", 0)
+		_, _ = watcher.Create(o.pathNodeConnection, "", 0)
+		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, "", 0)
 
-		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+		//o.watcher.Watch(zookeeper.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
 		go func() {
 			for i := 0; i < 3; i++ {
@@ -132,7 +139,7 @@ func (o *ZGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher, 
 	}
 }
 
-func (o *ZGateway) loop() {
+func (o *EtcdGateway) loop() {
 	var ok bool
 	var msg *qtiny.Message
 	for {
@@ -154,7 +161,7 @@ func (o *ZGateway) loop() {
 	}
 }
 
-func (o *ZGateway) timerloop(timer *qroutine.Timer, err error) {
+func (o *EtcdGateway) timerloop(timer *qroutine.Timer, err error) {
 	if err != nil {
 		return
 	}
@@ -165,7 +172,7 @@ func (o *ZGateway) timerloop(timer *qroutine.Timer, err error) {
 	o.nanoLocalPublishRegistries()
 }
 
-func (o *ZGateway) Poll(limit int) (chan *qtiny.Message, error) {
+func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 	if limit <= 0 {
 		limit = 8192
@@ -186,16 +193,16 @@ func (o *ZGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	return ch, nil
 }
 
-func (o *ZGateway) publish(consumerAddress string, prefix string, data []byte) error {
+func (o *EtcdGateway) publish(consumerAddress string, prefix string, data []byte) error {
 	var uri = o.GetQueueZNodePath(consumerAddress)
-	var _, err = o.watcher.GetConn().Create(uri+prefix, data, zk.FlagEphemeral|zk.FlagSequence, zk.WorldACL(zk.PermAll))
+	var _, err = o.watcher.Create(uri+prefix, string(data), zk.FlagEphemeral|zk.FlagSequence)
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("publish error ", err.Error())
 	}
 	return err
 }
 
-func (o *ZGateway) Post(message *qtiny.Message) error {
+func (o *EtcdGateway) Post(message *qtiny.Message) error {
 
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
@@ -208,13 +215,13 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	message.Sender = o.GetId()
 
 	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
-		return o.MGateway.Post(message)
+		return o.MemGateway.Post(message)
 	}
 
 	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
 		var subscriber = o.Locals[message.Address]
 		if subscriber != nil {
-			return o.MGateway.Post(message)
+			return o.MemGateway.Post(message)
 		}
 	}
 
@@ -231,11 +238,15 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	if nano == nil || nano.RemoteAddresses() == nil {
 		nano = o.NanoRemoteRegister(message.Address)
 		var nanoZNodePath = o.GetNanoZNodePath(message.Address)
-		var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
+		fmt.Println(nanoZNodePath)
+		// TODO
+		//var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
+		var children []string
 		if err != nil {
 			return fmt.Errorf("no consumer found : " + err.Error())
 		}
-		o.watcher.Watch(WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
+		// TODO
+		//o.watcher.Watch(zookeeper.WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
 		if children == nil || len(children) == 0 {
 			return fmt.Errorf("no consumer found for " + message.Address)
 		}
@@ -259,14 +270,14 @@ func (o *ZGateway) Post(message *qtiny.Message) error {
 	return err
 }
 
-func (o *ZGateway) Broadcast(message *qtiny.Message) error {
+func (o *EtcdGateway) Broadcast(message *qtiny.Message) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
 	return o.Post(message)
 }
 
-func (o *ZGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
+func (o *EtcdGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 	var parent = o.GetNanoZNodePath(nano.Address)
-	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
+	var _, err = o.watcher.Create(parent, "", 0)
 	if err != nil {
 		if o.Logger != nil {
 			o.Logger.Println("nano register fail ", parent, " : ", err.Error())
@@ -274,7 +285,7 @@ func (o *ZGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 		return err
 	}
 	var path = o.GetNanoZNodeSelfPath(nano.Address)
-	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	var exist, cerr = o.watcher.Create(path, "", zk.FlagEphemeral)
 	if !exist && o.Logger != nil {
 		if cerr == nil {
 			o.Logger.Println("nano register ", path)
@@ -285,7 +296,7 @@ func (o *ZGateway) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 	return cerr
 }
 
-func (o *ZGateway) nanoLocalPublishRegistries() {
+func (o *EtcdGateway) nanoLocalPublishRegistries() {
 	if o.Locals == nil {
 		return
 	}
@@ -296,10 +307,10 @@ func (o *ZGateway) nanoLocalPublishRegistries() {
 	}
 }
 
-func (o *ZGateway) NanoLocalRegister(nano *qtiny.Nano) error {
+func (o *EtcdGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 
 	if nano.Flag&qtiny.NanoFlagLocalOnly > 0 {
-		return o.MGateway.NanoLocalRegister(nano)
+		return o.MemGateway.NanoLocalRegister(nano)
 	}
 
 	o.LocalAdd(nano)
@@ -309,12 +320,12 @@ func (o *ZGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *ZGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
+func (o *EtcdGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
 	// TODO implementation
 	return nil
 }
 
-func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+func (o *EtcdGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *EtcdWatcher, err error) bool {
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("nano registry watch error", err.Error())
 		return true
@@ -338,7 +349,7 @@ func (o *ZGateway) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 	return true
 }
 
-func (o *ZGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+func (o *EtcdGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *EtcdWatcher, err error) bool {
 	if err != nil {
 		if o.Logger != nil {
 			o.Logger.Println("node queue consume error", err.Error())
@@ -368,28 +379,29 @@ func (o *ZGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interfa
 	return true
 }
 
-func (o *ZGateway) messageConsume(conn *zk.Conn, root string, child string) {
+func (o *EtcdGateway) messageConsume(conn *clientv3.Client, root string, child string) {
 	defer o.consumeSemaphore.Done()
 	var path = root + "/" + child
-	var data, stat, err = conn.Get(path)
+	var data, err = conn.Get(context.TODO(), path)
 	if err != nil {
 		return
 	}
 	var msg = &qtiny.Message{}
-	_ = msg.FromJson(data)
+	_ = msg.FromJson(data.Kvs[0].Value)
 	msg.Timeout = 0
 	o.Queue <- msg
-	_ = conn.Delete(path, stat.Version)
+	// TODO
+	//_ = conn.Delete(path, stat.Version)
 }
 
-func (o *ZGateway) GetQueueZNodePath(nodeId string) string {
+func (o *EtcdGateway) GetQueueZNodePath(nodeId string) string {
 	return PathNodeQueue + "/" + nodeId
 }
 
-func (o *ZGateway) GetNanoZNodePath(address string) string {
+func (o *EtcdGateway) GetNanoZNodePath(address string) string {
 	return PathNano + "/" + address
 }
 
-func (o *ZGateway) GetNanoZNodeSelfPath(address string) string {
+func (o *EtcdGateway) GetNanoZNodeSelfPath(address string) string {
 	return fmt.Sprintf("%s/%s/%s", PathNano, address, o.GetId())
 }

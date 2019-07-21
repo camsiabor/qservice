@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-type MGateway struct {
+type MemGateway struct {
 	id  string
 	tag string
 
@@ -32,7 +32,7 @@ type MGateway struct {
 	Locals      map[string]*qtiny.Nano
 }
 
-func (o *MGateway) Start(config map[string]interface{}) error {
+func (o *MemGateway) Start(config map[string]interface{}) error {
 
 	var configId = util.GetStr(config, "", "id")
 	if len(configId) > 0 {
@@ -64,7 +64,7 @@ func (o *MGateway) Start(config map[string]interface{}) error {
 	return nil
 }
 
-func (o *MGateway) Stop(map[string]interface{}) error {
+func (o *MemGateway) Stop(map[string]interface{}) error {
 	o.Looping = false
 	if o.Queue != nil {
 		close(o.Queue)
@@ -73,7 +73,7 @@ func (o *MGateway) Stop(map[string]interface{}) error {
 	return nil
 }
 
-func (o *MGateway) Loop() {
+func (o *MemGateway) Loop() {
 	var ok bool
 	var msg *qtiny.Message
 	for o.Looping {
@@ -96,7 +96,7 @@ func (o *MGateway) Loop() {
 	o.Looping = false
 }
 
-func (o *MGateway) Poll(limit int) (chan *qtiny.Message, error) {
+func (o *MemGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 	if limit <= 0 {
 		limit = 8192
@@ -117,7 +117,7 @@ func (o *MGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	return ch, nil
 }
 
-func (o *MGateway) Post(message *qtiny.Message) error {
+func (o *MemGateway) Post(message *qtiny.Message) error {
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
 	}
@@ -130,12 +130,12 @@ func (o *MGateway) Post(message *qtiny.Message) error {
 	return nil
 }
 
-func (o *MGateway) Broadcast(message *qtiny.Message) error {
+func (o *MemGateway) Broadcast(message *qtiny.Message) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
 	return o.Post(message)
 }
 
-func (o *MGateway) NanoRemoteRegister(address string) *qtiny.Nano {
+func (o *MemGateway) NanoRemoteRegister(address string) *qtiny.Nano {
 	o.RemotesMutex.Lock()
 	defer o.RemotesMutex.Unlock()
 	if o.Remotes == nil {
@@ -150,7 +150,7 @@ func (o *MGateway) NanoRemoteRegister(address string) *qtiny.Nano {
 	return service
 }
 
-func (o *MGateway) RemoteGet(address string) *qtiny.Nano {
+func (o *MemGateway) RemoteGet(address string) *qtiny.Nano {
 	o.RemotesMutex.RLock()
 	defer o.RemotesMutex.RUnlock()
 	if o.Remotes == nil {
@@ -159,21 +159,21 @@ func (o *MGateway) RemoteGet(address string) *qtiny.Nano {
 	return o.Remotes[address]
 }
 
-func (o *MGateway) NanoLocalRegister(nano *qtiny.Nano) error {
+func (o *MemGateway) NanoLocalRegister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *MGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
+func (o *MemGateway) NanoLocalUnregister(nano *qtiny.Nano) error {
 	return nil
 }
 
-func (o *MGateway) NanoQuery(message *qtiny.Message) *qtiny.Nano {
+func (o *MemGateway) NanoQuery(message *qtiny.Message) *qtiny.Nano {
 	return nil
 }
 
 /* ====================================== subscribers ===================================== */
 
-func (o *MGateway) LocalAdd(nano *qtiny.Nano) {
+func (o *MemGateway) LocalAdd(nano *qtiny.Nano) {
 	o.LocalsMutex.Lock()
 	defer o.LocalsMutex.Unlock()
 	if o.Locals == nil {
@@ -189,7 +189,7 @@ func (o *MGateway) LocalAdd(nano *qtiny.Nano) {
 	}
 }
 
-func (o *MGateway) LocalRemove(address string) {
+func (o *MemGateway) LocalRemove(address string) {
 	if o.Locals == nil {
 		return
 	}
@@ -198,7 +198,7 @@ func (o *MGateway) LocalRemove(address string) {
 	delete(o.Locals, address)
 }
 
-func (o *MGateway) LocalAll() map[string]*qtiny.Nano {
+func (o *MemGateway) LocalAll() map[string]*qtiny.Nano {
 	if o.Locals == nil {
 		return nil
 	}
@@ -213,26 +213,26 @@ func (o *MGateway) LocalAll() map[string]*qtiny.Nano {
 
 /* ============================================================================================= */
 
-func (o *MGateway) GetId() string {
+func (o *MemGateway) GetId() string {
 	return o.id
 }
 
-func (o *MGateway) GetTag() string {
+func (o *MemGateway) GetTag() string {
 	return o.tag
 }
 
-func (o *MGateway) GetLogger() *log.Logger {
+func (o *MemGateway) GetLogger() *log.Logger {
 	return o.Logger
 }
 
-func (o *MGateway) SetLogger(logger *log.Logger) {
+func (o *MemGateway) SetLogger(logger *log.Logger) {
 	o.Logger = logger
 }
 
-func (o *MGateway) GetDiscovery() qtiny.Discovery {
+func (o *MemGateway) GetDiscovery() qtiny.Discovery {
 	return o.Discovery
 }
 
-func (o *MGateway) SetDiscovery(discovery qtiny.Discovery) {
+func (o *MemGateway) SetDiscovery(discovery qtiny.Discovery) {
 	o.Discovery = discovery
 }
