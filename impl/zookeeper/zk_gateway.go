@@ -1,11 +1,12 @@
 package zookeeper
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
+	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
-	"github.com/twinj/uuid"
 	"os"
 	"sync"
 )
@@ -14,8 +15,7 @@ type ZooGateway struct {
 	memory.MemGateway
 	watcher *ZooWatcher
 
-	connectId string
-
+	pathRootQueue string
 	pathNodeQueue string
 
 	consumeSemaphore sync.WaitGroup
@@ -24,6 +24,10 @@ type ZooGateway struct {
 func (o *ZooGateway) Init(config map[string]interface{}) error {
 
 	var err error
+
+	if len(o.pathRootQueue) == 0 {
+		o.pathRootQueue = util.GetStr(config, "/qqueue", "queue.root")
+	}
 
 	if o.watcher == nil {
 		o.watcher = &ZooWatcher{}
@@ -89,12 +93,18 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 			o.Logger.Println("zookeeper gateway connected ", o.watcher.Endpoints)
 		}
 
-		if len(o.connectId) == 0 {
-			var hostname, _ = os.Hostname()
-			o.connectId = hostname + ":" + uuid.NewV4().String()
+		_, err = o.watcher.Create(o.pathRootQueue, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+		if err != nil {
+			o.Logger.Printf("%v create queue root error %v", o.GetId(), err.Error())
 		}
 
-		o.pathNodeQueue = fmt.Sprintf("%v/%v", PathNodeQueue, o.GetId())
+		o.pathNodeQueue = fmt.Sprintf("%v/%v", o.pathRootQueue, o.GetId())
+		var data, _ = json.Marshal(o.GetMeta())
+		_, err = o.watcher.Create(o.pathNodeQueue, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+		if err != nil {
+			o.Logger.Printf("%v create queue error %v", o.GetId(), err.Error())
+		}
+
 		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
 		if o.Logger != nil {
@@ -147,8 +157,8 @@ func (o *ZooGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	return ch, nil
 }
 
-func (o *ZooGateway) publish(consumerAddress string, prefix string, data []byte) error {
-	var uri = o.GetQueueZNodePath(consumerAddress)
+func (o *ZooGateway) publish(portalAddress string, prefix string, data []byte) error {
+	var uri = o.GetQueueZNodePath(portalAddress)
 	var _, err = o.watcher.GetConn().Create(uri+prefix, data, zk.FlagEphemeral|zk.FlagSequence, zk.WorldACL(zk.PermAll))
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("publish error ", err.Error())
@@ -200,17 +210,17 @@ func (o *ZooGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
-		var consumerAddresses = remote.RemoteAddresses()
-		for i := 0; i < len(consumerAddresses); i++ {
-			var consumerAddress = consumerAddresses[i]
+		var portalAddresses = remote.PortalAddresses()
+		for i := 0; i < len(portalAddresses); i++ {
+			var consumerAddress = portalAddresses[i]
 			var perr = o.publish(consumerAddress, "/b", data)
 			if perr != nil {
 				err = perr
 			}
 		}
 	} else {
-		var consumerAddress = remote.RemoteAddress(-1)
-		err = o.publish(consumerAddress, "/p", data)
+		var portalAddress = remote.PortalAddress(-1)
+		err = o.publish(portalAddress, "/p", data)
 	}
 	return err
 }
@@ -270,7 +280,7 @@ func (o *ZooGateway) messageConsume(conn *zk.Conn, root string, child string) {
 }
 
 func (o *ZooGateway) GetQueueZNodePath(nodeId string) string {
-	return PathNodeQueue + "/" + nodeId
+	return o.pathRootQueue + "/" + nodeId
 }
 
 func (o *ZooGateway) GetType() string {

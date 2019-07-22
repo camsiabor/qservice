@@ -42,10 +42,6 @@ func (o *UdpGateway) Init(config map[string]interface{}) error {
 		Port: o.port,
 	})
 
-	if err != nil {
-		return err
-	}
-
 	return err
 }
 

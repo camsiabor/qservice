@@ -22,15 +22,13 @@ type EtcdGateway struct {
 	remoteQueues map[string]*Queue
 }
 
-const PathNodeQueue = "/qnode"
-const PathConnection = "/qconn"
+const PathNodeQueue = "/qqueue"
 
 func (o *EtcdGateway) Init(config map[string]interface{}) error {
 
 	var err error
 
 	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
-	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
 
 	if o.watcher == nil {
 		o.watcher = &EtcdWatcher{}
@@ -83,9 +81,11 @@ func (o *EtcdGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, 
 
 	var tag string
 	if event == EtcdWatcherEventConnected {
-		tag = fmt.Sprintf("connected %v", o.watcher.Endpoints)
+		o.EventChannelSend(qtiny.GatewayEventConnected, o.GetMeta())
+		tag = fmt.Sprintf("%v connected ", o.String())
 	} else if event == EtcdWatcherEventDisconnected {
-		tag = fmt.Sprintf("disconnected %v", o.watcher.Endpoints)
+		o.EventChannelSend(qtiny.GatewayEventDisconnected, o.GetMeta())
+		tag = fmt.Sprintf("%v disconnected ", o.String())
 	}
 
 	if err != nil {
@@ -107,11 +107,7 @@ func (o *EtcdGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, 
 	}
 
 	_, _ = watcher.Create(PathNodeQueue, "", 0)
-	_, _ = watcher.Create(PathConnection, "", 0)
-
 	_, _ = watcher.Create(o.pathNodeQueue, "", 0)
-	_, _ = watcher.Create(o.pathNodeConnection, "", 0)
-	_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, "", 0)
 
 	if o.localQueue == nil {
 		var ctx, cancel = context.WithCancel(context.TODO())
@@ -196,7 +192,7 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
-		var consumerAddresses = nano.RemoteAddresses()
+		var consumerAddresses = nano.PortalAddresses()
 		for i := 0; i < len(consumerAddresses); i++ {
 			var consumerAddress = consumerAddresses[i]
 			var perr = o.publish(consumerAddress, "/b", data)
@@ -205,7 +201,7 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 			}
 		}
 	} else {
-		var consumerAddress = nano.RemoteAddress(-1)
+		var consumerAddress = nano.PortalAddress(-1)
 		err = o.publish(consumerAddress, "/p", data)
 	}
 	return err

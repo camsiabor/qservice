@@ -20,14 +20,21 @@ type MemDiscovery struct {
 
 	Listeners []chan *qtiny.Message
 
-	RemotesMutex sync.RWMutex
-	Remotes      map[string]*qtiny.Nano
-
+	// local nanos
 	LocalsMutex sync.RWMutex
 	Locals      map[string]*qtiny.Nano
 
+	// remote nanos
+	RemotesMutex sync.RWMutex
+	Remotes      map[string]*qtiny.Nano
+
+	// local gateway
 	GatewaysMutex sync.RWMutex
 	Gateways      map[string]qtiny.Gateway
+
+	// remote portal
+	PortalsMutex sync.RWMutex
+	Portals      map[string]*qtiny.Portal
 }
 
 func (o *MemDiscovery) Start(config map[string]interface{}) error {
@@ -193,6 +200,35 @@ func (o *MemDiscovery) GatewayUnpublish(gateway qtiny.Gateway) error {
 	_ = gateway.EventChannelClose(gateway.GetId())
 	delete(o.Gateways, gateway.GetId())
 	return nil
+}
+
+/* ======================== portals ==================================== */
+
+func (o *MemDiscovery) PortalGet(address string) qtiny.PortalKind {
+	if o.Portals == nil {
+		return nil
+	}
+	o.PortalsMutex.RLock()
+	defer o.PortalsMutex.RUnlock()
+	return o.Portals[address]
+}
+
+func (o *MemDiscovery) PortalSet(portal *qtiny.Portal) {
+
+	if portal == nil {
+		panic("invalid argument, portal is nil")
+	}
+
+	if len(portal.Address) == 0 {
+		panic("invalid argument, portal address is empty")
+	}
+
+	o.PortalsMutex.Lock()
+	defer o.PortalsMutex.Unlock()
+	if o.Portals == nil {
+		o.Portals = make(map[string]*qtiny.Portal)
+	}
+	o.Portals[portal.Address] = portal
 }
 
 /* ============================================================================================= */

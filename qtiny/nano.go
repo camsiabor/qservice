@@ -35,11 +35,11 @@ type Nano struct {
 	localAlpha *Nano
 	localMutex sync.RWMutex
 
-	remoteMutex sync.RWMutex
-	remoteIndex int32
-	remoteCount int
-	remoteArray []string
-	remoteMap   map[string]interface{}
+	portalMutex sync.RWMutex
+	portalIndex int32
+	portalCount int
+	portalArray []string
+	portals     map[string]interface{}
 
 	callbacks []NanoCallback
 }
@@ -144,9 +144,9 @@ func (o *Nano) LocalAll() []*Nano {
 
 /* ====================================== remote consumers ==================================== */
 
-func (o *Nano) RemoteSet(address []string, data []interface{}) {
-	o.remoteMutex.Lock()
-	defer o.remoteMutex.Unlock()
+func (o *Nano) PortalSet(address []string, data []interface{}) {
+	o.portalMutex.Lock()
+	defer o.portalMutex.Unlock()
 
 	var m = make(map[string]interface{})
 	for i := range address {
@@ -162,41 +162,41 @@ func (o *Nano) RemoteSet(address []string, data []interface{}) {
 		}
 		m[oneaddr] = onedata
 	}
-	o.remoteMap = m
-	o.remoteArray = address
-	o.remoteCount = len(o.remoteArray)
+	o.portals = m
+	o.portalArray = address
+	o.portalCount = len(o.portalArray)
 }
 
-func (o *Nano) RemoteAdd(address string, data interface{}) {
-	o.remoteMutex.Lock()
-	defer o.remoteMutex.Unlock()
+func (o *Nano) PortalAdd(address string, data interface{}) {
+	o.portalMutex.Lock()
+	defer o.portalMutex.Unlock()
 
-	if o.remoteArray == nil {
-		o.remoteArray = []string{address}
+	if o.portalArray == nil {
+		o.portalArray = []string{address}
 	} else {
-		for i := 0; i < o.remoteCount; i++ {
-			if address == o.remoteArray[i] {
+		for i := 0; i < o.portalCount; i++ {
+			if address == o.portalArray[i] {
 				return
 			}
 		}
-		o.remoteArray = append(o.remoteArray, address)
+		o.portalArray = append(o.portalArray, address)
 	}
-	if o.remoteMap == nil {
-		o.remoteMap = make(map[string]interface{})
+	if o.portals == nil {
+		o.portals = make(map[string]interface{})
 	}
-	o.remoteMap[address] = data
-	o.remoteCount = len(o.remoteArray)
+	o.portals[address] = data
+	o.portalCount = len(o.portalArray)
 }
 
-func (o *Nano) RemoteRemove(address string) {
-	o.remoteMutex.Lock()
-	defer o.remoteMutex.Unlock()
-	if o.remoteArray == nil {
+func (o *Nano) PortalRemove(address string) {
+	o.portalMutex.Lock()
+	defer o.portalMutex.Unlock()
+	if o.portalArray == nil {
 		return
 	}
 	var index = -1
-	for i := 0; i < o.remoteCount; i++ {
-		if o.remoteArray[i] == address {
+	for i := 0; i < o.portalCount; i++ {
+		if o.portalArray[i] == address {
 			index = i
 			break
 		}
@@ -205,46 +205,46 @@ func (o *Nano) RemoteRemove(address string) {
 		return
 	}
 	var novaIndex = 0
-	var nova = make([]string, o.remoteCount-1)
-	for i := 0; i < o.remoteCount; i++ {
+	var nova = make([]string, o.portalCount-1)
+	for i := 0; i < o.portalCount; i++ {
 		if i != index {
-			nova[novaIndex] = o.remoteArray[i]
+			nova[novaIndex] = o.portalArray[i]
 			novaIndex = novaIndex + 1
 		}
 	}
-	o.remoteArray = nova
+	o.portalArray = nova
 
-	if o.remoteMap != nil {
-		delete(o.remoteMap, address)
+	if o.portals != nil {
+		delete(o.portals, address)
 	}
-	o.remoteCount = len(o.remoteArray)
+	o.portalCount = len(o.portalArray)
 }
 
-func (o *Nano) RemoteAddresses() []string {
-	return o.remoteArray
+func (o *Nano) PortalAddresses() []string {
+	return o.portalArray
 }
 
-func (o *Nano) RemoteAddress(index int32) string {
-	if o.remoteArray == nil {
+func (o *Nano) PortalAddress(index int32) string {
+	if o.portalArray == nil {
 		return ""
 	}
-	if index < 0 || int(index) >= o.remoteCount {
-		index = atomic.AddInt32(&o.remoteIndex, 1)
-		if int(index) >= o.remoteCount {
+	if index < 0 || int(index) >= o.portalCount {
+		index = atomic.AddInt32(&o.portalIndex, 1)
+		if int(index) >= o.portalCount {
 			index = 0
-			o.remoteIndex = 0
+			o.portalIndex = 0
 		}
 	}
-	return o.remoteArray[index]
+	return o.portalArray[index]
 }
 
-func (o *Nano) RemoteGetData(address string) interface{} {
-	o.remoteMutex.RLock()
-	defer o.remoteMutex.RUnlock()
-	if o.remoteMap == nil {
+func (o *Nano) GatewayGetData(address string) interface{} {
+	o.portalMutex.RLock()
+	defer o.portalMutex.RUnlock()
+	if o.portals == nil {
 		return nil
 	}
-	return o.remoteMap[address]
+	return o.portals[address]
 }
 
 /* ======================= callback ====================== */

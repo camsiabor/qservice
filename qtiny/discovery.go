@@ -22,4 +22,6 @@ type Discovery interface {
 
 	GatewayPublish(gateway Gateway) error
 	GatewayUnpublish(gateway Gateway) error
+
+	PortalGet(address string) PortalKind
 }

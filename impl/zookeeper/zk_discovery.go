@@ -25,8 +25,7 @@ type ZooDiscovery struct {
 }
 
 const PathNano = "/qnano"
-const PathNodeQueue = "/qnode"
-const PathConnection = "/qconn"
+const PathConnection = "/qportal"
 
 func (o *ZooDiscovery) Init(config map[string]interface{}) error {
 
@@ -103,6 +102,9 @@ func (o *ZooDiscovery) handleConnectionEvents(event *zk.Event, watcher *ZooWatch
 		}
 
 		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+
+		o.watcher.Watch(WatchTypeChildren, PathConnection, PathConnection, o.portalRegistryWatch)
 
 		go func() {
 			for i := 0; i < 3; i++ {
@@ -147,7 +149,7 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 		}
 	}
 
-	if remote.RemoteAddresses() == nil {
+	if remote.PortalAddresses() == nil {
 
 		var nanoZNodePath = o.GetNanoZNodePath(address)
 		var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
@@ -159,7 +161,7 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 			return nil, fmt.Errorf("no consumer found for " + address)
 		}
 		for i := 0; i < len(children); i++ {
-			remote.RemoteAdd(children[i], children[i])
+			remote.PortalAdd(children[i], children[i])
 		}
 	}
 	return remote, nil
@@ -238,7 +240,7 @@ func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, d
 		nano, _ = o.MemDiscovery.NanoRemoteGet(address)
 	}
 	if nano != nil {
-		nano.RemoteSet(children, nil)
+		nano.PortalSet(children, nil)
 	}
 	return true
 }
@@ -258,7 +260,6 @@ func (o *ZooDiscovery) GatewayPublish(gateway qtiny.Gateway) error {
 
 func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.GatewayEventBox) {
 
-	var pathNodeQueue string
 	var pathNodeConnection string
 
 	defer func() {
@@ -273,22 +274,51 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qref.StackString(1))
 				}
 			}()
-			pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, gateway.GetId())
+
 			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
 			if box.Event == qtiny.GatewayEventConnected {
 				var data, _ = json.Marshal(box.Meta)
-
-				_, _ = o.watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
-				_, _ = o.watcher.Create(pathNodeQueue, data, 0, zk.WorldACL(zk.PermAll), true)
-
 				_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
-				_, _ = o.watcher.Create(pathNodeConnection, data, 0, zk.WorldACL(zk.PermAll), true)
-				_, _ = o.watcher.Create(pathNodeConnection+"/"+o.connectId, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+				_, _ = o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+
 			} else {
 				_ = o.watcher.Delete(pathNodeConnection, true, true)
 			}
 		}()
 	}
+}
+
+/* ======================== portal ========================= */
+
+func (o *ZooDiscovery) portalRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+	if err != nil && o.Logger != nil {
+		o.Logger.Println("portal registry watch error", err.Error())
+		return true
+	}
+	if data == nil {
+		return true
+	}
+	var children, ok = data.([]string)
+	if o.Logger != nil {
+		o.Logger.Println("remote consumer changes", box.Path, children)
+	}
+	if !ok {
+		return true
+	}
+	var address = qstr.SubLast(box.Path, "/")
+	nano, _ := o.MemDiscovery.NanoRemoteGet(address)
+	if nano == nil {
+		err = o.MemDiscovery.NanoRemoteRegister(&qtiny.Nano{Address: address})
+		if err != nil {
+			o.Logger.Println(err)
+			return true
+		}
+		nano, _ = o.MemDiscovery.NanoRemoteGet(address)
+	}
+	if nano != nil {
+		nano.PortalSet(children, nil)
+	}
+	return true
 }
 
 /* ======================== path =========================== */
