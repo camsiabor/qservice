@@ -20,6 +20,8 @@ type EtcdGateway struct {
 	pathNodeQueue      string
 	pathNodeConnection string
 
+	queue *Queue
+
 	consumeSemaphore sync.WaitGroup
 }
 
@@ -77,40 +79,31 @@ func (o *EtcdGateway) Stop(config map[string]interface{}) error {
 	return o.MemGateway.Stop(config)
 }
 
-func (o *EtcdGateway) handleConnectionEvents(event *zk.Event, watcher *EtcdWatcher, err error) {
+func (o *EtcdGateway) handleConnectionEvents(watcher *EtcdWatcher, err error) {
 
-	if event.State == zk.StateDisconnected {
-		if o.Logger != nil {
-			o.Logger.Println("zk gateway disconnected ", o.watcher.Endpoints)
-		}
-		return
+	if o.Logger != nil {
+		o.Logger.Println("zk gateway connected ", o.watcher.Endpoints)
 	}
 
-	if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly {
-		if o.Logger != nil {
-			o.Logger.Println("zk gateway connected ", o.watcher.Endpoints)
-		}
-
-		if len(o.connectId) == 0 {
-			var hostname, _ = os.Hostname()
-			o.connectId = hostname + ":" + uuid.NewV4().String()
-		}
-
-		_, _ = watcher.Create(PathNano, "", 0)
-		_, _ = watcher.Create(PathNodeQueue, "", 0)
-		_, _ = watcher.Create(PathConnection, "", 0)
-
-		_, _ = watcher.Create(o.pathNodeQueue, "", 0)
-		_, _ = watcher.Create(o.pathNodeConnection, "", 0)
-		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, "", 0)
-
-		//o.watcher.Watch(zookeeper.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
-
-		if o.Logger != nil {
-			o.Logger.Println("etcd gateway connected setup fin")
-		}
-
+	if len(o.connectId) == 0 {
+		var hostname, _ = os.Hostname()
+		o.connectId = hostname + ":" + uuid.NewV4().String()
 	}
+
+	_, _ = watcher.Create(PathNano, "", 0)
+	_, _ = watcher.Create(PathNodeQueue, "", 0)
+	_, _ = watcher.Create(PathConnection, "", 0)
+
+	_, _ = watcher.Create(o.pathNodeQueue, "", 0)
+	_, _ = watcher.Create(o.pathNodeConnection, "", 0)
+	_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, "", 0)
+
+	//o.watcher.Watch(zookeeper.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+
+	if o.Logger != nil {
+		o.Logger.Println("etcd gateway connected setup fin")
+	}
+
 }
 
 func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {

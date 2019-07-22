@@ -38,7 +38,7 @@ func (o *ZooGateway) Init(config map[string]interface{}) error {
 	}
 
 	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
-	o.watcher.AddConnectCallback(o.handleConnectionEvents)
+	o.watcher.AddCallback(o.handleConnectionEvents)
 
 	return err
 }

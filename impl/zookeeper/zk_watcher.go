@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-type ZooConnectCallback func(event *zk.Event, watcher *ZooWatcher, err error)
+type ZooWatcherCallback func(event *zk.Event, watcher *ZooWatcher, err error)
 
 type ZooWatcher struct {
 	Id                string
 	Endpoints         []string
 	SessionTimeout    time.Duration
 	ReconnectInterval time.Duration
-	connectCallbacks  []ZooConnectCallback
+	callbacks         []ZooWatcherCallback
 
 	conn         *zk.Conn
 	eventChannel <-chan zk.Event
@@ -117,17 +117,17 @@ func (o *ZooWatcher) Stop(map[string]interface{}) error {
 	return nil
 }
 
-func (o *ZooWatcher) AddConnectCallback(callback ZooConnectCallback) {
+func (o *ZooWatcher) AddCallback(callback ZooWatcherCallback) {
 	if callback == nil {
 		panic("null connect callback")
 	}
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	if o.connectCallbacks == nil {
-		o.connectCallbacks = []ZooConnectCallback{callback}
+	if o.callbacks == nil {
+		o.callbacks = []ZooWatcherCallback{callback}
 	} else {
-		o.connectCallbacks = append(o.connectCallbacks, callback)
+		o.callbacks = append(o.callbacks, callback)
 	}
 }
 
@@ -145,11 +145,11 @@ func (o *ZooWatcher) connectEventLoops(loop bool) {
 			connectevt = true
 		}
 
-		if o.connectCallbacks == nil {
+		if o.callbacks == nil {
 			continue
 		}
 
-		for _, callback := range o.connectCallbacks {
+		for _, callback := range o.callbacks {
 			func() {
 				defer func() {
 					var pan = recover()

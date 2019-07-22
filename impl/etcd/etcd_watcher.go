@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"fmt"
-	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
 	"go.etcd.io/etcd/clientv3"
@@ -12,7 +11,14 @@ import (
 	"time"
 )
 
-type EtcdConnectCallback func(event *zk.Event, watcher *EtcdWatcher, err error)
+type EtcdWatcherEvent int
+
+const (
+	EtcdWatcherEventConnected    EtcdWatcherEvent = 1
+	EtcdWatcherEventDisconnected EtcdWatcherEvent = 2
+)
+
+type EtcdWatcherCallback func(event EtcdWatcherEvent, watcher *EtcdWatcher, err error)
 
 type EtcdWatcher struct {
 	Id            string
@@ -24,7 +30,7 @@ type EtcdWatcher struct {
 
 	Logger *log.Logger
 
-	connectCallbacks []EtcdConnectCallback
+	callbacks []EtcdWatcherCallback
 
 	conn  *clientv3.Client
 	lease clientv3.Lease
@@ -93,8 +99,7 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 			})
 
 			if err == nil {
-				o.connected = true
-				o.notifyConnected(true)
+				o.notifyConnectStateChange(true, true)
 			}
 		}()
 	}
@@ -106,20 +111,19 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 	var ctx, _ = context.WithTimeout(context.TODO(), o.ReconnectInterval)
 	grant, err := o.lease.Grant(ctx, int64(o.ReconnectInterval/time.Second)+2)
 	if err != nil {
-		o.connected = false
 		o.Logger.Println(err)
+		o.notifyConnectStateChange(false, false)
 		return
 	}
 
 	ctx, _ = context.WithTimeout(context.TODO(), o.ReconnectInterval)
 	_, err = o.conn.Put(ctx, o.HeartbeatPath, "", clientv3.WithLease(grant.ID))
 	if err != nil {
-		o.connected = false
+		o.notifyConnectStateChange(false, false)
 		return
 	}
 
-	o.connected = true
-	o.notifyConnected(true)
+	o.notifyConnectStateChange(false, true)
 
 }
 
@@ -132,7 +136,7 @@ func (o *EtcdWatcher) Stop(map[string]interface{}) error {
 		o.reconnectTimer.Stop()
 	}
 
-	o.notifyConnected(false)
+	o.notifyConnectStateChange(false)
 
 	if o.conn == nil {
 		return fmt.Errorf("not connected yet")
@@ -146,17 +150,17 @@ func (o *EtcdWatcher) Stop(map[string]interface{}) error {
 	return nil
 }
 
-func (o *EtcdWatcher) AddConnectCallback(callback EtcdConnectCallback) {
+func (o *EtcdWatcher) AddConnectCallback(callback EtcdWatcherCallback) {
 	if callback == nil {
 		panic("null connect callback")
 	}
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	if o.connectCallbacks == nil {
-		o.connectCallbacks = []EtcdConnectCallback{callback}
+	if o.callbacks == nil {
+		o.callbacks = []EtcdWatcherCallback{callback}
 	} else {
-		o.connectCallbacks = append(o.connectCallbacks, callback)
+		o.callbacks = append(o.callbacks, callback)
 	}
 }
 
@@ -295,7 +299,31 @@ func (o *EtcdWatcher) IsConnected() bool {
 	return o.connected
 }
 
-func (o *EtcdWatcher) notifyConnected(value bool) {
+func (o *EtcdWatcher) invokeCallbacks(event EtcdWatcherEvent) {
+	if o.callbacks == nil {
+		return
+	}
+	for _, callback := range o.callbacks {
+		if callback != nil {
+			go callback(EtcdWatcherEventConnected, o, nil)
+		}
+	}
+}
+
+func (o *EtcdWatcher) notifyConnectStateChange(value bool, connected bool) {
+
+	o.connected = connected
+
+	if o.connected {
+		o.invokeCallbacks(EtcdWatcherEventConnected)
+	} else {
+		o.invokeCallbacks(EtcdWatcherEventDisconnected)
+	}
+
+	if !o.connected {
+		return
+	}
+
 	if o.connectChannel == nil {
 		return
 	}

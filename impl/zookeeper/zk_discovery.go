@@ -45,7 +45,7 @@ func (o *ZooDiscovery) Init(config map[string]interface{}) error {
 	}
 
 	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
-	o.watcher.AddConnectCallback(o.handleConnectionEvents)
+	o.watcher.AddCallback(o.handleConnectionEvents)
 
 	if o.timer != nil {
 		o.timer.Stop()
