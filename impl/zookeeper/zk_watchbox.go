@@ -26,9 +26,13 @@ type WatchBox struct {
 	Logger *log.Logger
 	Data   interface{}
 
-	control chan bool
 	routine WatchRoutine
 	watcher *ZooWatcher
+
+	looping bool
+
+	ch      <-chan zk.Event
+	control chan bool
 }
 
 func (o *WatchBox) GetType() WatchType {
@@ -39,7 +43,19 @@ func (o *WatchBox) GetPath() string {
 	return o.Path
 }
 
+func (o *WatchBox) stop() {
+	o.looping = false
+	if o.control != nil {
+		close(o.control)
+		o.control = nil
+	}
+}
+
 func (o *WatchBox) loop() {
+
+	if o.looping {
+		return
+	}
 
 	var ok bool
 	var err error
@@ -47,14 +63,17 @@ func (o *WatchBox) loop() {
 
 	var stat *zk.Stat
 	var event zk.Event
-	var ch <-chan zk.Event
 
 	event.Path = o.Path
 	event.Type = zk.EventSession
 	event.State = zk.StateHasSession
 	event.Err = nil
 
-	for {
+	o.looping = true
+
+	o.control = make(chan bool)
+
+	for o.looping {
 
 		var connectChannel = o.watcher.WaitForConnected()
 		if connectChannel != nil {
@@ -69,22 +88,24 @@ func (o *WatchBox) loop() {
 
 		switch o.wtype {
 		case WatchTypeGet:
-			data, stat, ch, err = o.watcher.conn.GetW(o.Path)
+			data, stat, o.ch, err = o.watcher.conn.GetW(o.Path)
 		case WatchTypeExist:
-			data, stat, ch, err = o.watcher.conn.ExistsW(o.Path)
+			data, stat, o.ch, err = o.watcher.conn.ExistsW(o.Path)
 		case WatchTypeChildren:
-			data, stat, ch, err = o.watcher.conn.ChildrenW(o.Path)
+			data, stat, o.ch, err = o.watcher.conn.ChildrenW(o.Path)
 		}
 		if !o.run(&event, stat, data, err) {
 			break
 		}
-		event, ok = <-ch
-		if !ok {
-			err = fmt.Errorf("closed")
-		}
-		if event.Type == zk.EventNotWatching {
-			if o.Logger != nil {
-				o.Logger.Println("zookeeper watcher event not watching ", o.Path)
+
+		select {
+		case event, ok = <-o.ch:
+			if !ok {
+				err = fmt.Errorf("closed")
+			}
+		case _, ok = <-o.control:
+			if !ok {
+				break
 			}
 		}
 	}

@@ -104,7 +104,7 @@ func (o *ZooDiscovery) handleConnectionEvents(event *zk.Event, watcher *ZooWatch
 		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
 		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
 
-		o.watcher.Watch(WatchTypeChildren, PathConnection, PathConnection, o.portalRegistryWatch)
+		o.watcher.Watch(WatchTypeChildren, PathConnection, PathConnection, o.portalsWatch)
 
 		go func() {
 			for i := 0; i < 3; i++ {
@@ -290,7 +290,7 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 
 /* ======================== portal ========================= */
 
-func (o *ZooDiscovery) portalRegistryWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+func (o *ZooDiscovery) portalsWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("portal registry watch error", err.Error())
 		return true
@@ -298,26 +298,68 @@ func (o *ZooDiscovery) portalRegistryWatch(event *zk.Event, stat *zk.Stat, data 
 	if data == nil {
 		return true
 	}
-	var children, ok = data.([]string)
+	var children, _ = data.([]string)
+
 	if o.Logger != nil {
-		o.Logger.Println("remote consumer changes", box.Path, children)
+		o.Logger.Println("portal registry changes", box.Path, children)
 	}
-	if !ok {
+
+	var addresses = make(map[string]*qtiny.Portal)
+	for _, address := range children {
+		var portal = o.MemDiscovery.PortalCreate(address)
+		portal.Path = box.Path + "/" + address
+		o.watcher.Watch(WatchTypeGet, portal.Path, portal, o.portalWatch)
+		addresses[address] = portal
+	}
+
+	var removes = make(map[string]*qtiny.Portal)
+	func() {
+		o.PortalsMutex.Lock()
+		defer o.PortalsMutex.Unlock()
+		if o.Portals == nil {
+			return
+		}
+		for address, portal := range o.Portals {
+			if addresses[address] == nil {
+				removes[address] = portal
+			}
+		}
+	}()
+
+	for address, portal := range removes {
+		o.watcher.UnWatch(WatchTypeGet, portal.Path)
+		o.PortalRemove(address)
+		o.Logger.Printf("portal %v remove", portal.Address)
+	}
+
+	return true
+}
+
+func (o *ZooDiscovery) portalWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+	if err != nil {
+		o.Logger.Printf("%v watch error %v", box.Path, err.Error())
 		return true
 	}
-	var address = qstr.SubLast(box.Path, "/")
-	nano, _ := o.MemDiscovery.NanoRemoteGet(address)
-	if nano == nil {
-		err = o.MemDiscovery.NanoRemoteRegister(&qtiny.Nano{Address: address})
-		if err != nil {
-			o.Logger.Println(err)
-			return true
-		}
-		nano, _ = o.MemDiscovery.NanoRemoteGet(address)
+	var portal = box.Data.(*qtiny.Portal)
+	if data == nil {
+		return true
 	}
-	if nano != nil {
-		nano.PortalSet(children, nil)
+	var bytes = data.([]byte)
+	var meta map[string]interface{}
+	err = json.Unmarshal(bytes, &meta)
+	if err != nil {
+		o.Logger.Printf("%v watch parse error %v", box.Path, err.Error())
+		return true
 	}
+
+	if meta != nil {
+		portal.Meta = meta
+	}
+
+	o.Logger.Printf("portal %v meta change", portal.Address)
+
+	portal.Type = util.GetStr(portal.Meta, "", "type")
+
 	return true
 }
 

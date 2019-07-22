@@ -192,6 +192,7 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 		box.routine = routine
 		return
 	}
+
 	o.watchMutex.Lock()
 	defer o.watchMutex.Unlock()
 
@@ -218,6 +219,27 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 	}
 	box.Logger = o.Logger
 	go box.loop()
+}
+
+func (o *ZooWatcher) UnWatch(wtype WatchType, path string) {
+
+	var box = o.getWatch(wtype, path, true)
+	if box == nil {
+		return
+	}
+
+	box.stop()
+
+	o.watchMutex.Lock()
+	defer o.watchMutex.Unlock()
+	switch wtype {
+	case WatchTypeGet:
+		delete(o.watchGet, path)
+	case WatchTypeExist:
+		delete(o.watchExist, path)
+	case WatchTypeChildren:
+		delete(o.watchChildren, path)
+	}
 }
 
 func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []zk.ACL, update bool) (bool, error) {

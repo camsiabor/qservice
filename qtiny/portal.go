@@ -7,10 +7,11 @@ type PortalKind interface {
 }
 
 type Portal struct {
-	Type    string
-	Address string
-
-	Meta map[string]interface{}
+	Type       string
+	Path       string
+	Address    string
+	Discoverer Discovery
+	Meta       map[string]interface{}
 }
 
 func (o *Portal) GetType() string {

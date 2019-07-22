@@ -213,6 +213,16 @@ func (o *MemDiscovery) PortalGet(address string) qtiny.PortalKind {
 	return o.Portals[address]
 }
 
+func (o *MemDiscovery) PortalCreate(addresss string) *qtiny.Portal {
+	var kind = o.PortalGet(addresss)
+	if kind != nil {
+		return kind.(*qtiny.Portal)
+	}
+	var portal = &qtiny.Portal{Address: addresss}
+	o.PortalSet(portal)
+	return portal
+}
+
 func (o *MemDiscovery) PortalSet(portal *qtiny.Portal) {
 
 	if portal == nil {
@@ -228,7 +238,17 @@ func (o *MemDiscovery) PortalSet(portal *qtiny.Portal) {
 	if o.Portals == nil {
 		o.Portals = make(map[string]*qtiny.Portal)
 	}
+	portal.Discoverer = o
 	o.Portals[portal.Address] = portal
+}
+
+func (o *MemDiscovery) PortalRemove(address string) {
+	if o.Portals == nil {
+		return
+	}
+	o.PortalsMutex.Lock()
+	defer o.PortalsMutex.Unlock()
+	delete(o.Portals, address)
 }
 
 /* ============================================================================================= */

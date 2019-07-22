@@ -174,6 +174,9 @@ func (o *ZooGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
+		if message.Sender == o.GetId() {
+			message.Flag = message.Flag | qtiny.MessageFlagLocalOnly
+		}
 	}
 
 	message.Sender = o.GetId()
