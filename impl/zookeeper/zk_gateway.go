@@ -178,6 +178,7 @@ func (o *ZooGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 			return err
 		}
 		if local != nil {
+			message.Flag = message.Flag & qtiny.MessageFlagLocalOnly
 			return o.MemGateway.Post(message, discovery)
 		}
 	}
