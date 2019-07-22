@@ -228,9 +228,9 @@ func (o *Nano) PortalAddress(index int32) string {
 	if o.portalArray == nil {
 		return ""
 	}
-	if index < 0 || int(index) >= o.portalCount {
+	if index < 0 || int(index) >= len(o.portalArray) {
 		index = atomic.AddInt32(&o.portalIndex, 1)
-		if int(index) >= o.portalCount {
+		if int(index) >= len(o.portalArray) {
 			index = 0
 			o.portalIndex = 0
 		}

@@ -186,7 +186,7 @@ func (o *ZooWatcher) getWatch(wtype WatchType, path string, lock bool) *WatchBox
 	return nil
 }
 
-func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routine WatchRoutine) {
+func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, interval time.Duration, routine WatchRoutine) {
 	var box = o.getWatch(wtype, path, true)
 	if box != nil {
 		box.routine = routine
@@ -202,12 +202,15 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 	}
 
 	box = &WatchBox{}
-	box.wtype = wtype
+
 	box.Path = path
+	box.Data = data
+
+	box.wtype = wtype
 	box.routine = routine
 	box.control = make(chan bool, 2)
 	box.watcher = o
-	box.Data = data
+	box.interval = interval
 
 	switch wtype {
 	case WatchTypeGet:

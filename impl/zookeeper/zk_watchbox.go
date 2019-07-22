@@ -33,6 +33,8 @@ type WatchBox struct {
 
 	ch      <-chan zk.Event
 	control chan bool
+
+	interval time.Duration
 }
 
 func (o *WatchBox) GetType() WatchType {
@@ -98,6 +100,11 @@ func (o *WatchBox) loop() {
 			break
 		}
 
+		if o.interval <= 0 {
+			o.interval = time.Hour * 24
+		}
+
+		var timeout = time.After(o.interval)
 		select {
 		case event, ok = <-o.ch:
 			if !ok {
@@ -107,7 +114,10 @@ func (o *WatchBox) loop() {
 			if !ok {
 				break
 			}
+		case <-timeout:
+
 		}
+
 	}
 
 	if o.Logger != nil {

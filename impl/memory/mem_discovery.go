@@ -210,7 +210,11 @@ func (o *MemDiscovery) PortalGet(address string) qtiny.PortalKind {
 	}
 	o.PortalsMutex.RLock()
 	defer o.PortalsMutex.RUnlock()
-	return o.Portals[address]
+	var portal = o.Portals[address]
+	if portal == nil {
+		return nil
+	}
+	return portal
 }
 
 func (o *MemDiscovery) PortalCreate(addresss string) *qtiny.Portal {

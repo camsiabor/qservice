@@ -104,7 +104,7 @@ func (o *ZooDiscovery) handleConnectionEvents(event *zk.Event, watcher *ZooWatch
 		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
 		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
 
-		o.watcher.Watch(WatchTypeChildren, PathConnection, PathConnection, o.portalsWatch)
+		o.watcher.Watch(WatchTypeChildren, PathConnection, nil, time.Duration(15)*time.Second, o.portalsWatch)
 
 		go func() {
 			for i := 0; i < 3; i++ {
@@ -156,7 +156,7 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 		if err != nil {
 			return nil, fmt.Errorf("no consumer found : " + err.Error())
 		}
-		o.watcher.Watch(WatchTypeChildren, nanoZNodePath, nanoZNodePath, o.nanoRemoteRegistryWatch)
+		o.watcher.Watch(WatchTypeChildren, nanoZNodePath, nil, time.Hour, o.nanoRemoteRegistryWatch)
 		if children == nil || len(children) == 0 {
 			return nil, fmt.Errorf("no consumer found for " + address)
 		}
@@ -266,6 +266,7 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 		_ = o.watcher.Delete(pathNodeConnection, true, true)
 	}()
 
+	var publishing = false
 	for box := range ch {
 		func() {
 			defer func() {
@@ -277,11 +278,21 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 
 			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
 			if box.Event == qtiny.GatewayEventConnected {
-				var data, _ = json.Marshal(box.Meta)
-				_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
-				_, _ = o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
-
+				publishing = true
+				go func() {
+					for publishing {
+						var data, _ = json.Marshal(box.Meta)
+						_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+						var _, err = o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+						if err == nil {
+							publishing = false
+							return
+						}
+						time.Sleep(time.Second * time.Duration(5))
+					}
+				}()
 			} else {
+				publishing = false
 				_ = o.watcher.Delete(pathNodeConnection, true, true)
 			}
 		}()
@@ -291,6 +302,7 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 /* ======================== portal ========================= */
 
 func (o *ZooDiscovery) portalsWatch(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
+
 	if err != nil && o.Logger != nil {
 		o.Logger.Println("portal registry watch error", err.Error())
 		return true
@@ -300,36 +312,66 @@ func (o *ZooDiscovery) portalsWatch(event *zk.Event, stat *zk.Stat, data interfa
 	}
 	var children, _ = data.([]string)
 
-	if o.Logger != nil {
-		o.Logger.Println("portal registry changes", box.Path, children)
+	if len(children) == 0 {
+		return true
 	}
 
-	var addresses = make(map[string]*qtiny.Portal)
+	var addresses = make(map[string]int)
 	for _, address := range children {
-		var portal = o.MemDiscovery.PortalCreate(address)
-		portal.Path = box.Path + "/" + address
-		o.watcher.Watch(WatchTypeGet, portal.Path, portal, o.portalWatch)
-		addresses[address] = portal
+		addresses[address] = 1
 	}
 
 	var removes = make(map[string]*qtiny.Portal)
+
 	func() {
+
 		o.PortalsMutex.Lock()
 		defer o.PortalsMutex.Unlock()
+
 		if o.Portals == nil {
 			return
 		}
 		for address, portal := range o.Portals {
-			if addresses[address] == nil {
+			if addresses[address] == 0 {
 				removes[address] = portal
 			}
 		}
 	}()
 
-	for address, portal := range removes {
-		o.watcher.UnWatch(WatchTypeGet, portal.Path)
-		o.PortalRemove(address)
-		o.Logger.Printf("portal %v remove", portal.Address)
+	if len(removes) > 0 {
+
+		o.Logger.Println("portal registry removes", box.Path, removes)
+
+		for address, portal := range removes {
+			o.watcher.UnWatch(WatchTypeGet, portal.Path)
+			o.PortalRemove(address)
+			o.Logger.Printf("portal %v remove", portal.Address)
+		}
+
+	}
+
+	var news []string
+	for _, address := range children {
+		var current = o.MemDiscovery.PortalGet(address)
+		if current == nil {
+			if news == nil {
+				news = []string{address}
+			} else {
+				news = append(news, address)
+			}
+		}
+	}
+
+	if news == nil {
+		return true
+	}
+
+	o.Logger.Println("portal registry creates", box.Path, news)
+
+	for _, address := range news {
+		var portal = o.MemDiscovery.PortalCreate(address)
+		portal.Path = box.Path + "/" + address
+		o.watcher.Watch(WatchTypeGet, portal.Path, portal, time.Duration(15)*time.Minute, o.portalWatch)
 	}
 
 	return true

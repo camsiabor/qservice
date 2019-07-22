@@ -9,6 +9,7 @@ import (
 	"github.com/camsiabor/qservice/qtiny"
 	"os"
 	"sync"
+	"time"
 )
 
 type ZooGateway struct {
@@ -105,7 +106,7 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 			o.Logger.Printf("%v create queue error %v", o.GetId(), err.Error())
 		}
 
-		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, nil, time.Hour, o.nodeQueueConsume)
 
 		if o.Logger != nil {
 			o.Logger.Println("zookeeper gateway connected setup fin", o.GetId())
@@ -157,7 +158,21 @@ func (o *ZooGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	return ch, nil
 }
 
-func (o *ZooGateway) publish(portalAddress string, prefix string, data []byte) error {
+func (o *ZooGateway) publish(
+	portalAddress string, message *qtiny.Message,
+	prefix string, data []byte,
+	discovery qtiny.Discovery, remote *qtiny.Nano, retry int) error {
+
+	var portal = discovery.PortalGet(portalAddress)
+
+	if portal == nil || len(portal.GetType()) == 0 {
+		if remote != nil && retry > 0 {
+			portalAddress = remote.PortalAddress(-1)
+			return o.publish(portalAddress, message, prefix, data, discovery, remote, retry-1)
+		}
+		return fmt.Errorf("route %v to portal address %v but no portal found", message.Address, portalAddress)
+	}
+
 	var uri = o.GetQueueZNodePath(portalAddress)
 	var _, err = o.watcher.GetConn().Create(uri+prefix, data, zk.FlagEphemeral|zk.FlagSequence, zk.WorldACL(zk.PermAll))
 	if err != nil && o.Logger != nil {
@@ -202,7 +217,7 @@ func (o *ZooGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 	}
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
-		return o.publish(message.Address, "/r", data)
+		return o.publish(message.Address, message, "/r", data, discovery, nil, 0)
 	}
 	remote, err := discovery.NanoRemoteGet(message.Address)
 	if err != nil {
@@ -216,14 +231,14 @@ func (o *ZooGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 		var portalAddresses = remote.PortalAddresses()
 		for i := 0; i < len(portalAddresses); i++ {
 			var consumerAddress = portalAddresses[i]
-			var perr = o.publish(consumerAddress, "/b", data)
+			var perr = o.publish(consumerAddress, message, "/b", data, discovery, nil, 0)
 			if perr != nil {
 				err = perr
 			}
 		}
 	} else {
 		var portalAddress = remote.PortalAddress(-1)
-		err = o.publish(portalAddress, "/p", data)
+		err = o.publish(portalAddress, message, "/p", data, discovery, remote, 8)
 	}
 	return err
 }
