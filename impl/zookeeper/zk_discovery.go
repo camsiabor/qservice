@@ -102,7 +102,7 @@ func (o *ZooDiscovery) handleConnectionEvents(event *zk.Event, watcher *ZooWatch
 			o.connectId = hostname + ":" + uuid.NewV4().String()
 		}
 
-		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
 
 		go func() {
 			for i := 0; i < 3; i++ {
@@ -169,7 +169,7 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 
 func (o *ZooDiscovery) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 	var parent = o.GetNanoZNodePath(nano.Address)
-	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll))
+	var _, err = o.watcher.Create(parent, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
 	if err != nil {
 		if o.Logger != nil {
 			o.Logger.Println("nano register fail ", parent, " : ", err.Error())
@@ -177,7 +177,7 @@ func (o *ZooDiscovery) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 		return err
 	}
 	var path = o.GetNanoZNodeSelfPath(nano.Address)
-	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll), false)
 	if !exist && o.Logger != nil {
 		if cerr == nil {
 			o.Logger.Println("nano register ", path)
@@ -277,10 +277,13 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
 			if box.Event == qtiny.GatewayEventConnected {
 				var data, _ = json.Marshal(box.Meta)
-				_, _ = o.watcher.Create(pathNodeQueue, data, 0, zk.WorldACL(zk.PermAll))
-				_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-				_, _ = o.watcher.Create(pathNodeConnection, data, 0, zk.WorldACL(zk.PermAll))
-				_, _ = o.watcher.Create(pathNodeConnection+"/"+o.connectId, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+
+				_, _ = o.watcher.Create(PathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+				_, _ = o.watcher.Create(pathNodeQueue, data, 0, zk.WorldACL(zk.PermAll), true)
+
+				_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+				_, _ = o.watcher.Create(pathNodeConnection, data, 0, zk.WorldACL(zk.PermAll), true)
+				_, _ = o.watcher.Create(pathNodeConnection+"/"+o.connectId, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
 			} else {
 				_ = o.watcher.Delete(pathNodeConnection, true, true)
 			}

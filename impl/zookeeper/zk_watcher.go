@@ -220,16 +220,24 @@ func (o *ZooWatcher) Watch(wtype WatchType, path string, data interface{}, routi
 	go box.loop()
 }
 
-func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []zk.ACL) (bool, error) {
-	exists, _, err := o.conn.Exists(path)
+func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []zk.ACL, update bool) (bool, error) {
+
+	var exists, stat, err = o.conn.Exists(path)
 	if err != nil {
 		return false, err
 	}
-	if exists {
-		return true, nil
+
+	if update {
+		_, err = o.conn.Set(path, data, stat.Version)
 	}
+
+	if exists {
+		return true, err
+	}
+
 	_, err = o.conn.Create(path, data, createflags, acl)
-	return false, err
+
+	return update, err
 }
 
 func (o *ZooWatcher) Delete(path string, removeself, recursive bool) error {

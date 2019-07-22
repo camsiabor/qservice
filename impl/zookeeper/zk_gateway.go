@@ -30,9 +30,9 @@ func (o *ZooGateway) Init(config map[string]interface{}) error {
 		o.watcher.Logger = o.Logger
 	}
 
-	o.GetMeta()
-
 	err = o.watcher.Start(config)
+
+	o.GetMeta()
 
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 
 	if event.State == zk.StateDisconnected {
 
-		o.EventChannelSend(qtiny.GatewayEventDisconnected, o.Meta)
+		o.EventChannelSend(qtiny.GatewayEventDisconnected, o.GetMeta())
 
 		if o.Logger != nil {
 			o.Logger.Println("zookeeper gateway disconnected ", o.watcher.Endpoints)
@@ -83,7 +83,7 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 
 	if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly {
 
-		o.EventChannelSend(qtiny.GatewayEventConnected, o.Meta)
+		o.EventChannelSend(qtiny.GatewayEventConnected, o.GetMeta())
 
 		if o.Logger != nil {
 			o.Logger.Println("zookeeper gateway connected ", o.watcher.Endpoints)
@@ -284,6 +284,8 @@ func (o *ZooGateway) GetMeta() map[string]interface{} {
 		o.Meta["id"] = o.GetId()
 		o.Meta["type"] = o.GetType()
 		o.Meta["hostname"] = hostname
+	}
+	if o.Meta["endpoints"] == nil {
 		o.Meta["endpoints"] = o.watcher.Endpoints
 	}
 	return o.Meta
