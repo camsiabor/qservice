@@ -10,7 +10,6 @@ import (
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -18,16 +17,12 @@ type ZooDiscovery struct {
 	memory.MemDiscovery
 	watcher *ZooWatcher
 
-	connectId          string
-	pathNodeConnection string
-
-	consumeSemaphore sync.WaitGroup
+	connectId string
 
 	timer *qroutine.Timer
 }
 
 const PathNano = "/qnano"
-const PathConnection = "/qconn"
 
 func (o *ZooDiscovery) Init(config map[string]interface{}) error {
 
@@ -44,7 +39,6 @@ func (o *ZooDiscovery) Init(config map[string]interface{}) error {
 		return err
 	}
 
-	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
 	o.watcher.AddCallback(o.handleConnectionEvents)
 
 	if o.timer != nil {
@@ -105,10 +99,6 @@ func (o *ZooDiscovery) handleConnectionEvents(event *zk.Event, watcher *ZooWatch
 		}
 
 		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-
-		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 
 		go func() {
 			for i := 0; i < 3; i++ {

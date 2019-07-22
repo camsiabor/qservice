@@ -2,14 +2,11 @@ package etcd
 
 import (
 	"fmt"
-	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
-	v3 "go.etcd.io/etcd/clientv3"
 	"golang.org/x/net/context"
 	"os"
-	"sync"
 )
 
 type EtcdGateway struct {
@@ -20,13 +17,12 @@ type EtcdGateway struct {
 	pathNodeQueue      string
 	pathNodeConnection string
 
-	queue *Queue
+	localQueue *Queue
 
-	consumeSemaphore sync.WaitGroup
+	remoteQueues map[string]*Queue
 }
 
 const PathNodeQueue = "/qnode"
-const PathNano = "/qnano"
 const PathConnection = "/qconn"
 
 func (o *EtcdGateway) Init(config map[string]interface{}) error {
@@ -42,13 +38,17 @@ func (o *EtcdGateway) Init(config map[string]interface{}) error {
 		o.watcher.HeartbeatPath = o.pathNodeConnection
 	}
 
+	if o.remoteQueues == nil {
+		o.remoteQueues = make(map[string]*Queue)
+	}
+
 	err = o.watcher.Start(config)
 
 	if err != nil {
 		return err
 	}
 
-	o.watcher.AddConnectCallback(o.handleConnectionEvents)
+	o.watcher.AddConnectCallback(o.handleEvent)
 
 	return err
 }
@@ -79,10 +79,26 @@ func (o *EtcdGateway) Stop(config map[string]interface{}) error {
 	return o.MemGateway.Stop(config)
 }
 
-func (o *EtcdGateway) handleConnectionEvents(watcher *EtcdWatcher, err error) {
+func (o *EtcdGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, err error) {
+
+	var tag string
+	if event == EtcdWatcherEventConnected {
+		tag = fmt.Sprintf("connected %v", o.watcher.Endpoints)
+	} else if event == EtcdWatcherEventDisconnected {
+		tag = fmt.Sprintf("disconnected %v", o.watcher.Endpoints)
+	}
+
+	if err != nil {
+		o.Logger.Println(tag, err.Error())
+		return
+	}
 
 	if o.Logger != nil {
-		o.Logger.Println("zk gateway connected ", o.watcher.Endpoints)
+		o.Logger.Printf("etcd gateway %v ", tag)
+	}
+
+	if event == EtcdWatcherEventDisconnected {
+		return
 	}
 
 	if len(o.connectId) == 0 {
@@ -90,7 +106,6 @@ func (o *EtcdGateway) handleConnectionEvents(watcher *EtcdWatcher, err error) {
 		o.connectId = hostname + ":" + uuid.NewV4().String()
 	}
 
-	_, _ = watcher.Create(PathNano, "", 0)
 	_, _ = watcher.Create(PathNodeQueue, "", 0)
 	_, _ = watcher.Create(PathConnection, "", 0)
 
@@ -98,7 +113,16 @@ func (o *EtcdGateway) handleConnectionEvents(watcher *EtcdWatcher, err error) {
 	_, _ = watcher.Create(o.pathNodeConnection, "", 0)
 	_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, "", 0)
 
-	//o.watcher.Watch(zookeeper.WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
+	if o.localQueue == nil {
+		var ctx, cancel = context.WithCancel(context.TODO())
+		o.localQueue = &Queue{
+			ctx:        ctx,
+			keyPrefix:  o.pathNodeQueue,
+			client:     o.watcher.GetConn(),
+			cancelFunc: cancel,
+		}
+		go o.nodeQueueConsume()
+	}
 
 	if o.Logger != nil {
 		o.Logger.Println("etcd gateway connected setup fin")
@@ -125,15 +149,6 @@ func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	}
 
 	return ch, nil
-}
-
-func (o *EtcdGateway) publish(consumerAddress string, prefix string, data []byte) error {
-	var uri = o.GetQueueZNodePath(consumerAddress)
-	var _, err = o.watcher.Create(uri+prefix, string(data), zk.FlagEphemeral|zk.FlagSequence)
-	if err != nil && o.Logger != nil {
-		o.Logger.Println("publish error ", err.Error())
-	}
-	return err
 }
 
 func (o *EtcdGateway) Post(message *qtiny.Message) error {
@@ -201,59 +216,48 @@ func (o *EtcdGateway) Broadcast(message *qtiny.Message) error {
 	return o.Post(message)
 }
 
-func (o *EtcdGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *EtcdWatcher, err error) bool {
-	if err != nil {
-		if o.Logger != nil {
-			o.Logger.Println("node queue consume error", err.Error())
+/* ======================== producer ======================================== */
+
+func (o *EtcdGateway) publish(consumerAddress string, prefix string, data []byte) error {
+
+	var remoteQueue = o.remoteQueues[consumerAddress]
+	if remoteQueue == nil {
+		var ctx, cancel = context.WithCancel(context.TODO())
+		remoteQueue = &Queue{
+			ctx:        ctx,
+			cancelFunc: cancel,
+			client:     o.watcher.GetConn(),
+			keyPrefix:  PathNodeQueue + "/" + consumerAddress,
 		}
-		return true
+		func() {
+			o.Mutex.Lock()
+			defer o.Mutex.Unlock()
+			o.remoteQueues[consumerAddress] = remoteQueue
+		}()
 	}
-	if data == nil {
-		return true
-	}
-	var children, ok = data.([]string)
-	if !ok {
-		return true
-	}
-	var n = len(children)
-	if n == 0 {
-		return true
-	}
-	var root = box.GetPath()
-	var conn = o.watcher.GetConn()
 
-	for i := 0; i < n; i++ {
-		o.consumeSemaphore.Add(1)
-		go o.messageConsume(conn, root, children[i])
-	}
-	o.consumeSemaphore.Wait()
-
-	return true
+	return remoteQueue.Enqueue(string(data))
 }
 
-func (o *EtcdGateway) messageConsume(conn *v3.Client, root string, child string) {
-	defer o.consumeSemaphore.Done()
-	var path = root + "/" + child
-	var data, err = conn.Get(context.TODO(), path)
-	if err != nil {
-		return
+/* ======================== consumer loop ========================================== */
+
+func (o *EtcdGateway) nodeQueueConsume() {
+	for o.Looping {
+		data, err := o.localQueue.Dequeue()
+		if err != nil {
+			o.Logger.Printf("%v node queue consume error %v", o.String(), err.Error())
+		}
+		go o.messageConsume([]byte(data))
 	}
+}
+
+func (o *EtcdGateway) messageConsume(data []byte) {
 	var msg = &qtiny.Message{}
-	_ = msg.FromJson(data.Kvs[0].Value)
+	_ = msg.FromJson(data)
 	msg.Timeout = 0
 	o.Queue <- msg
-	// TODO
-	//_ = conn.Delete(path, stat.Version)
 }
 
-func (o *EtcdGateway) GetQueueZNodePath(nodeId string) string {
-	return PathNodeQueue + "/" + nodeId
-}
-
-func (o *EtcdGateway) GetNanoZNodePath(address string) string {
-	return PathNano + "/" + address
-}
-
-func (o *EtcdGateway) GetNanoZNodeSelfPath(address string) string {
-	return fmt.Sprintf("%s/%s/%s", PathNano, address, o.GetId())
+func (o *EtcdGateway) String() string {
+	return fmt.Sprintf("[etcd gateway - %v]", o.GetId())
 }

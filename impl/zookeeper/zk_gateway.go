@@ -14,13 +14,16 @@ type ZooGateway struct {
 	memory.MemGateway
 	watcher *ZooWatcher
 
-	connectId     string
-	pathNodeQueue string
+	connectId string
+
+	pathNodeQueue      string
+	pathNodeConnection string
 
 	consumeSemaphore sync.WaitGroup
 }
 
 const PathNodeQueue = "/qnode"
+const PathConnection = "/qconn"
 
 func (o *ZooGateway) Init(config map[string]interface{}) error {
 
@@ -38,6 +41,7 @@ func (o *ZooGateway) Init(config map[string]interface{}) error {
 	}
 
 	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
+	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
 	o.watcher.AddCallback(o.handleConnectionEvents)
 
 	return err
@@ -87,8 +91,11 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 			o.connectId = hostname + ":" + uuid.NewV4().String()
 		}
 
-		_, _ = watcher.Create(PathNano, []byte(""), 0, zk.WorldACL(zk.PermAll))
 		_, _ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+
+		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 
 		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 

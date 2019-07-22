@@ -9,14 +9,10 @@ import (
 
 // Queue implements a multi-reader, multi-writer distributed queue.
 type Queue struct {
-	client *v3.Client
-	ctx    context.Context
-
-	keyPrefix string
-}
-
-func NewQueue(client *v3.Client, keyPrefix string) *Queue {
-	return &Queue{client, context.TODO(), keyPrefix}
+	client     *v3.Client
+	ctx        context.Context
+	keyPrefix  string
+	cancelFunc context.CancelFunc
 }
 
 func (q *Queue) Enqueue(val string) error {

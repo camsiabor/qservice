@@ -92,16 +92,10 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 	}
 
 	if o.conn == nil {
-		func() {
-			o.conn, err = clientv3.New(clientv3.Config{
-				Endpoints:   o.Endpoints,
-				DialTimeout: o.SessionTimeout,
-			})
-
-			if err == nil {
-				o.notifyConnectStateChange(true, true)
-			}
-		}()
+		o.conn, err = clientv3.New(clientv3.Config{
+			Endpoints:   o.Endpoints,
+			DialTimeout: o.SessionTimeout,
+		})
 	}
 
 	if o.lease == nil {
@@ -123,7 +117,9 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 		return
 	}
 
-	o.notifyConnectStateChange(false, true)
+	if !o.connected {
+		o.notifyConnectStateChange(true, true)
+	}
 
 }
 
@@ -136,7 +132,7 @@ func (o *EtcdWatcher) Stop(map[string]interface{}) error {
 		o.reconnectTimer.Stop()
 	}
 
-	o.notifyConnectStateChange(false)
+	o.notifyConnectStateChange(false, false)
 
 	if o.conn == nil {
 		return fmt.Errorf("not connected yet")
@@ -221,7 +217,11 @@ func (o *EtcdWatcher) Get(path string, timeout time.Duration, opts ...clientv3.O
 		return nil, fmt.Errorf("disconnected")
 	}
 	var ctx = o.GetContextWithTimeout(nil, timeout)
-	return o.conn.Get(ctx, path, opts...)
+	if opts == nil {
+		return o.conn.Get(ctx, path)
+	} else {
+		return o.conn.Get(ctx, path, opts...)
+	}
 }
 
 func (o *EtcdWatcher) Put(path string, val string, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.PutResponse, error) {
@@ -229,7 +229,11 @@ func (o *EtcdWatcher) Put(path string, val string, timeout time.Duration, opts .
 		return nil, fmt.Errorf("disconnected")
 	}
 	var ctx = o.GetContextWithTimeout(nil, timeout)
-	return o.conn.Put(ctx, path, val, opts...)
+	if opts == nil {
+		return o.conn.Put(ctx, path, val)
+	} else {
+		return o.conn.Put(ctx, path, val, opts...)
+	}
 }
 
 func (o *EtcdWatcher) PutWithTTL(path string, val string, ttl int64, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.PutResponse, *clientv3.LeaseGrantResponse, error) {
@@ -247,11 +251,13 @@ func (o *EtcdWatcher) PutWithTTL(path string, val string, ttl int64, timeout tim
 		opts = append(opts, clientv3.WithLease(leaseresp.ID))
 	}
 	ctx = o.GetContextWithTimeout(nil, timeout)
-	put, err := o.conn.Put(ctx, path, val, opts...)
-	if err != nil {
-		return nil, nil, err
+	var put *clientv3.PutResponse
+	if opts == nil {
+		put, err = o.conn.Put(ctx, path, val)
+	} else {
+		put, err = o.conn.Put(ctx, path, val, opts...)
 	}
-	return put, leaseresp, nil
+	return put, leaseresp, err
 }
 
 func (o *EtcdWatcher) Delete(path string, timeout time.Duration, opts ...clientv3.OpOption) (*clientv3.DeleteResponse, error) {
@@ -259,7 +265,12 @@ func (o *EtcdWatcher) Delete(path string, timeout time.Duration, opts ...clientv
 		return nil, fmt.Errorf("disconnected")
 	}
 	var ctx = o.GetContextWithTimeout(nil, timeout)
-	return o.conn.Delete(ctx, path, opts...)
+	if opts == nil {
+		return o.conn.Delete(ctx, path)
+	} else {
+		return o.conn.Delete(ctx, path, opts...)
+	}
+
 }
 
 func (o *EtcdWatcher) Compact(recv int64, timeout time.Duration, opts ...clientv3.CompactOption) (*clientv3.CompactResponse, error) {
@@ -267,7 +278,12 @@ func (o *EtcdWatcher) Compact(recv int64, timeout time.Duration, opts ...clientv
 		return nil, fmt.Errorf("disconnected")
 	}
 	var ctx = o.GetContextWithTimeout(nil, timeout)
-	return o.conn.Compact(ctx, recv, opts...)
+	if opts == nil {
+		return o.conn.Compact(ctx, recv)
+	} else {
+		return o.conn.Compact(ctx, recv, opts...)
+	}
+
 }
 
 func (o *EtcdWatcher) Watch(path string, timeout time.Duration, opts ...clientv3.OpOption) clientv3.WatchChan {
@@ -280,7 +296,7 @@ func (o *EtcdWatcher) Watch(path string, timeout time.Duration, opts ...clientv3
 }
 
 func (o *EtcdWatcher) Create(path string, data string, timeout time.Duration) (bool, error) {
-	get, err := o.Get(path, timeout, nil)
+	get, err := o.Get(path, timeout)
 	if err != nil {
 		return false, err
 	}
