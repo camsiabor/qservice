@@ -1,8 +1,10 @@
 package zookeeper
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
+	"github.com/camsiabor/qcom/qref"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/qstr"
 	"github.com/camsiabor/qcom/util"
@@ -243,31 +245,47 @@ func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, d
 
 /* ======================== gateway ========================== */
 
-func (o *ZooDiscovery) hoook(gateway qtiny.Gateway) (*qtiny.Future, error) {
-	var future = &qtiny.Future{}
+func (o *ZooDiscovery) GatewayPublish(gateway qtiny.Gateway) error {
+	if err := o.MemDiscovery.GatewayPublish(gateway); err != nil {
+		return err
+	}
+	var ch, err = gateway.EventChannelGet(gateway.GetId())
+	if err == nil {
+		go o.gatewayEventLoop(gateway, ch)
+	}
+	return err
+}
 
-	future.SetRoutine(func(event qtiny.FutureEvent, future *qtiny.Future) qtiny.FutureCallbackReturn {
+func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.GatewayEventBox) {
 
-		var ch = o.watcher.WaitForConnected()
-		if ch != nil {
-			<-ch
-		}
+	var pathNodeQueue string
+	var pathNodeConnection string
 
-		var pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, gateway.GetId())
-		var pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
+	defer func() {
+		_ = o.watcher.Delete(pathNodeConnection, true, true)
+	}()
 
-		_, _ = o.watcher.Create(pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-
-		_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = o.watcher.Create(pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = o.watcher.Create(pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-
-		future.Succeed(0, nil)
-
-		return 0
-	})
-
-	return future, nil
+	for box := range ch {
+		func() {
+			defer func() {
+				var pan = recover()
+				if pan != nil && o.Logger != nil {
+					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qref.StackString(1))
+				}
+			}()
+			pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, gateway.GetId())
+			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
+			if box.Event == qtiny.GatewayEventConnected {
+				var data, _ = json.Marshal(box.Meta)
+				_, _ = o.watcher.Create(pathNodeQueue, data, 0, zk.WorldACL(zk.PermAll))
+				_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+				_, _ = o.watcher.Create(pathNodeConnection, data, 0, zk.WorldACL(zk.PermAll))
+				_, _ = o.watcher.Create(pathNodeConnection+"/"+o.connectId, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+			} else {
+				_ = o.watcher.Delete(pathNodeConnection, true, true)
+			}
+		}()
+	}
 }
 
 /* ======================== path =========================== */

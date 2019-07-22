@@ -185,8 +185,9 @@ func (o *MemGateway) EventChannelSend(event qtiny.GatewayEvent, meta map[string]
 	defer o.EventChannelsMutex.RUnlock()
 
 	var box = &qtiny.GatewayEventBox{
-		Event: event,
-		Meta:  meta,
+		Event:  event,
+		Meta:   meta,
+		Source: o,
 	}
 	for _, ch := range o.EventChannels {
 		ch <- box

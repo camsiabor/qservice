@@ -232,6 +232,28 @@ func (o *ZooWatcher) Create(path string, data []byte, createflags int32, acl []z
 	return false, err
 }
 
+func (o *ZooWatcher) Delete(path string, removeself, recursive bool) error {
+
+	var children, stat, err = o.conn.Children(path)
+	if children != nil && len(children) > 0 {
+		if !recursive {
+			return fmt.Errorf("it has children : %v", path)
+		}
+		var n = len(children)
+		for i := 0; i < n; i++ {
+			var subpath = path + "/" + children[i]
+			_ = o.Delete(subpath, true, true)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if removeself {
+		return o.conn.Delete(path, stat.Version)
+	}
+	return nil
+}
+
 func (o *ZooWatcher) GetConn() *zk.Conn {
 	return o.conn
 }

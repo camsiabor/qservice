@@ -89,6 +89,9 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
 	// discovery
 	o.discovery.SetId(o.id)
+	if err := o.discovery.GatewayPublish(o.gateway); err != nil {
+		return err
+	}
 	if o.discovery.GetLogger() == nil {
 		o.discovery.SetLogger(o.logger)
 	}

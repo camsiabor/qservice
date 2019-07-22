@@ -1,6 +1,8 @@
 package qtiny
 
-import "log"
+import (
+	"log"
+)
 
 type GatewayEvent int
 
@@ -10,8 +12,9 @@ const (
 )
 
 type GatewayEventBox struct {
-	Event GatewayEvent
-	Meta  interface{}
+	Event  GatewayEvent
+	Source Gateway
+	Meta   interface{}
 }
 
 type Gateway interface {

@@ -186,6 +186,11 @@ func (o *MemDiscovery) GatewayUnpublish(gateway qtiny.Gateway) error {
 	if o.Gateways == nil {
 		return nil
 	}
+	var current = o.Gateways[gateway.GetId()]
+	if current == nil {
+		return nil
+	}
+	_ = gateway.EventChannelClose(gateway.GetId())
 	delete(o.Gateways, gateway.GetId())
 	return nil
 }

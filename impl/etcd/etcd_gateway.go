@@ -274,8 +274,10 @@ func (o *EtcdGateway) GetType() string {
 func (o *EtcdGateway) GetMeta() map[string]interface{} {
 	if o.Meta == nil {
 		o.Meta = make(map[string]interface{})
+		var hostname, _ = os.Hostname()
 		o.Meta["id"] = o.GetId()
 		o.Meta["type"] = o.GetType()
+		o.Meta["hostname"] = hostname
 		o.Meta["endpoints"] = o.watcher.Endpoints
 	}
 	return o.Meta
