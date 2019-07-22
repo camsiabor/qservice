@@ -20,6 +20,7 @@ const (
 	MessageTypeReply     MessageType = 0x0002
 	MessageTypeFail      MessageType = 0x0004
 	MessageTypeBroadcast MessageType = 0x1000
+	MessageTypeMulticast MessageType = 0x2000
 )
 
 const (

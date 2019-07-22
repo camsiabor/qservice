@@ -19,4 +19,7 @@ type Discovery interface {
 	NanoLocalRegister(nano *Nano) error
 	NanoLocalUnregister(nano *Nano) error
 	NanoLocalGet(address string) (*Nano, error)
+
+	GatewayPublish(gateway Gateway) error
+	GatewayUnpublish(gateway Gateway) error
 }

@@ -23,7 +23,10 @@ type MemGateway struct {
 
 	Listeners []chan *qtiny.Message
 
-	Discovery qtiny.Discovery
+	Meta map[string]interface{}
+
+	EventChannelsMutex sync.RWMutex
+	EventChannels      map[string]chan *qtiny.GatewayEventBox
 }
 
 func (o *MemGateway) Start(config map[string]interface{}) error {
@@ -41,6 +44,10 @@ func (o *MemGateway) Start(config map[string]interface{}) error {
 		return fmt.Errorf("already running")
 	}
 
+	if o.EventChannels == nil {
+		o.EventChannels = make(map[string]chan *qtiny.GatewayEventBox)
+	}
+
 	if o.Queue == nil {
 		o.QueueLimit = util.GetInt(config, 8192, "queue.limit")
 		if o.QueueLimit <= 16 {
@@ -56,10 +63,14 @@ func (o *MemGateway) Start(config map[string]interface{}) error {
 
 func (o *MemGateway) Stop(map[string]interface{}) error {
 	o.Looping = false
+
 	if o.Queue != nil {
 		close(o.Queue)
 		o.Queue = nil
 	}
+
+	o.EventChannelSend(qtiny.GatewayEventDisconnected, o.Meta)
+
 	return nil
 }
 
@@ -107,7 +118,7 @@ func (o *MemGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	return ch, nil
 }
 
-func (o *MemGateway) Post(message *qtiny.Message) error {
+func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
 	}
@@ -120,9 +131,14 @@ func (o *MemGateway) Post(message *qtiny.Message) error {
 	return nil
 }
 
-func (o *MemGateway) Broadcast(message *qtiny.Message) error {
+func (o *MemGateway) Multicast(message *qtiny.Message, discovery qtiny.Discovery) error {
+	message.Type = message.Type | qtiny.MessageTypeMulticast
+	return o.Post(message, discovery)
+}
+
+func (o *MemGateway) Broadcast(message *qtiny.Message, discovery qtiny.Discovery) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
-	return o.Post(message)
+	return o.Post(message, discovery)
 }
 
 /* ============================================================================================= */
@@ -147,10 +163,67 @@ func (o *MemGateway) SetLogger(logger *log.Logger) {
 	o.Logger = logger
 }
 
-func (o *MemGateway) GetDiscovery() qtiny.Discovery {
-	return o.Discovery
+func (o *MemGateway) GetType() string {
+	return "memory"
 }
 
-func (o *MemGateway) SetDiscovery(discovery qtiny.Discovery) {
-	o.Discovery = discovery
+func (o *MemGateway) GetMeta() map[string]interface{} {
+	if o.Meta == nil {
+		o.Meta = make(map[string]interface{})
+		o.Meta["id"] = o.GetId()
+		o.Meta["type"] = o.GetType()
+	}
+	return o.Meta
+}
+
+func (o *MemGateway) EventChannelSend(event qtiny.GatewayEvent, meta map[string]interface{}) {
+	if o.EventChannels == nil {
+		return
+	}
+
+	o.EventChannelsMutex.RLock()
+	defer o.EventChannelsMutex.RUnlock()
+
+	var box = &qtiny.GatewayEventBox{
+		Event: event,
+		Meta:  meta,
+	}
+	for _, ch := range o.EventChannels {
+		ch <- box
+	}
+}
+
+func (o *MemGateway) EventChannelGet(channelId string) (<-chan *qtiny.GatewayEventBox, error) {
+
+	o.EventChannelsMutex.Lock()
+	defer o.EventChannelsMutex.Unlock()
+
+	if o.EventChannels == nil {
+		o.EventChannels = make(map[string]chan *qtiny.GatewayEventBox)
+	}
+
+	var ch = o.EventChannels[channelId]
+	if ch == nil {
+		ch = make(chan *qtiny.GatewayEventBox, 16)
+		o.EventChannels[channelId] = ch
+	}
+	return ch, nil
+}
+
+func (o *MemGateway) EventChannelClose(channelId string) error {
+	o.EventChannelsMutex.Lock()
+	defer o.EventChannelsMutex.Unlock()
+
+	if o.EventChannels == nil {
+		return nil
+	}
+
+	var ch = o.EventChannels[channelId]
+	if ch == nil {
+		return nil
+	}
+
+	delete(o.EventChannels, channelId)
+	close(ch)
+	return nil
 }

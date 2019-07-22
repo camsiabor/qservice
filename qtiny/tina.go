@@ -100,7 +100,6 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
 	// gateway
 	o.gateway.SetId(o.id)
-	o.gateway.SetDiscovery(o.discovery)
 	if o.gateway.GetLogger() == nil {
 		o.gateway.SetLogger(o.logger)
 	}

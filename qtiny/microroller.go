@@ -230,7 +230,7 @@ func (o *Microroller) Post(request *Message) (response *Message, err error) {
 		}
 	}
 
-	err = o.gateway.Post(request)
+	err = o.gateway.Post(request, o.discovery)
 	if err != nil {
 		return nil, err
 	}
@@ -245,12 +245,12 @@ func (o *Microroller) Post(request *Message) (response *Message, err error) {
 	return request.Related, nil
 }
 
+func (o *Microroller) Multicast(message *Message) error {
+	return o.gateway.Multicast(message, o.discovery)
+}
+
 func (o *Microroller) Broadcast(message *Message) error {
-	// TODO implement
-
-	message.Type = MessageTypeBroadcast
-	return o.gateway.Post(message)
-
+	return o.gateway.Broadcast(message, o.discovery)
 }
 
 func (o *Microroller) GetGateway() Gateway {

@@ -1,4 +1,10 @@
-package etcd
+package udp
+
+import (
+	"github.com/camsiabor/qcom/util"
+	"github.com/camsiabor/qservice/impl/memory"
+	"net"
+)
 
 import (
 	"fmt"
@@ -9,51 +15,41 @@ import (
 	"os"
 )
 
-type EtcdGateway struct {
+type UdpGateway struct {
 	memory.MemGateway
-	watcher *EtcdWatcher
 
-	connectId          string
-	pathNodeQueue      string
-	pathNodeConnection string
+	connectId string
 
-	localQueue *Queue
+	port int
+	host string
 
-	remoteQueues map[string]*Queue
+	listener *net.UDPConn
+	conns    map[string]*net.UDPConn
 }
 
 const PathNodeQueue = "/qnode"
 const PathConnection = "/qconn"
 
-func (o *EtcdGateway) Init(config map[string]interface{}) error {
+func (o *UdpGateway) Init(config map[string]interface{}) error {
 
 	var err error
 
-	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
-	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
+	o.host = util.GetStr(config, "", "host")
+	o.port = util.GetInt(config, 9981, "port")
 
-	if o.watcher == nil {
-		o.watcher = &EtcdWatcher{}
-		o.watcher.Logger = o.Logger
-		o.watcher.HeartbeatPath = o.pathNodeConnection
-	}
-
-	if o.remoteQueues == nil {
-		o.remoteQueues = make(map[string]*Queue)
-	}
-
-	err = o.watcher.Start(config)
+	o.listener, err = net.ListenUDP("udp", &net.UDPAddr{
+		IP:   net.ParseIP("0.0.0.0"),
+		Port: o.port,
+	})
 
 	if err != nil {
 		return err
 	}
 
-	o.watcher.AddConnectCallback(o.handleEvent)
-
 	return err
 }
 
-func (o *EtcdGateway) Start(config map[string]interface{}) error {
+func (o *UdpGateway) Start(config map[string]interface{}) error {
 	var err error
 	defer func() {
 		if err != nil {
@@ -67,7 +63,7 @@ func (o *EtcdGateway) Start(config map[string]interface{}) error {
 	return err
 }
 
-func (o *EtcdGateway) Stop(config map[string]interface{}) error {
+func (o *UdpGateway) Stop(config map[string]interface{}) error {
 
 	if o.watcher != nil {
 		var err = o.watcher.Stop(config)
@@ -79,7 +75,7 @@ func (o *EtcdGateway) Stop(config map[string]interface{}) error {
 	return o.MemGateway.Stop(config)
 }
 
-func (o *EtcdGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, err error) {
+func (o *UdpGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, err error) {
 
 	var tag string
 	if event == EtcdWatcherEventConnected {
@@ -130,7 +126,7 @@ func (o *EtcdGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, 
 
 }
 
-func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {
+func (o *UdpGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 	if limit <= 0 {
 		limit = 8192
@@ -151,7 +147,7 @@ func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {
 	return ch, nil
 }
 
-func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
+func (o *UdpGateway) Post(message *qtiny.Message) error {
 
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
@@ -164,16 +160,16 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 	message.Sender = o.GetId()
 
 	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
-		return o.MemGateway.Post(message, discovery)
+		return o.MemGateway.Post(message)
 	}
 
 	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
-		var local, err = discovery.NanoLocalGet(message.Address)
+		var local, err = o.Discovery.NanoLocalGet(message.Address)
 		if err != nil {
 			return err
 		}
 		if local != nil {
-			return o.MemGateway.Post(message, discovery)
+			return o.MemGateway.Post(message)
 		}
 	}
 
@@ -186,13 +182,13 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 		return o.publish(message.Address, "/r", data)
 	}
 
-	nano, err := discovery.NanoRemoteGet(message.Address)
+	nano, err := o.Discovery.NanoRemoteGet(message.Address)
 	if err != nil {
 		return err
 	}
 
 	if nano == nil {
-		o.Logger.Printf("discovery return nil nano %v", discovery)
+		o.Logger.Printf("discovery return nil nano %v", o.Discovery)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -211,19 +207,14 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 	return err
 }
 
-func (o *EtcdGateway) Multicast(message *qtiny.Message, discovery qtiny.Discovery) error {
-	message.Type = message.Type | qtiny.MessageTypeMulticast
-	return o.Post(message, discovery)
-}
-
-func (o *EtcdGateway) Broadcast(message *qtiny.Message, discovery qtiny.Discovery) error {
+func (o *UdpGateway) Broadcast(message *qtiny.Message) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
-	return o.Post(message, discovery)
+	return o.Post(message)
 }
 
 /* ======================== producer ======================================== */
 
-func (o *EtcdGateway) publish(consumerAddress string, prefix string, data []byte) error {
+func (o *UdpGateway) publish(consumerAddress string, prefix string, data []byte) error {
 
 	var remoteQueue = o.remoteQueues[consumerAddress]
 	if remoteQueue == nil {
@@ -246,7 +237,7 @@ func (o *EtcdGateway) publish(consumerAddress string, prefix string, data []byte
 
 /* ======================== consumer loop ========================================== */
 
-func (o *EtcdGateway) nodeQueueConsume() {
+func (o *UdpGateway) nodeQueueConsume() {
 	for o.Looping {
 		data, err := o.localQueue.Dequeue()
 		if err != nil {
@@ -256,27 +247,28 @@ func (o *EtcdGateway) nodeQueueConsume() {
 	}
 }
 
-func (o *EtcdGateway) messageConsume(data []byte) {
+func (o *UdpGateway) messageConsume(data []byte) {
 	var msg = &qtiny.Message{}
 	_ = msg.FromJson(data)
 	msg.Timeout = 0
 	o.Queue <- msg
 }
 
-func (o *EtcdGateway) String() string {
+func (o *UdpGateway) String() string {
 	return fmt.Sprintf("[etcd gateway - %v]", o.GetId())
 }
 
-func (o *EtcdGateway) GetType() string {
-	return "etcd"
+func (o *UdpGateway) GetType() string {
+	return "udp"
 }
 
-func (o *EtcdGateway) GetMeta() map[string]interface{} {
+func (o *UdpGateway) GetMeta() map[string]interface{} {
 	if o.Meta == nil {
 		o.Meta = make(map[string]interface{})
 		o.Meta["id"] = o.GetId()
 		o.Meta["type"] = o.GetType()
-		o.Meta["endpoints"] = o.watcher.Endpoints
+		o.Meta["port"] = o.port
+		o.Meta["host"] = o.host
 	}
 	return o.Meta
 }

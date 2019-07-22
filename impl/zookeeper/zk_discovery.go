@@ -23,6 +23,8 @@ type ZooDiscovery struct {
 }
 
 const PathNano = "/qnano"
+const PathNodeQueue = "/qnode"
+const PathConnection = "/qconn"
 
 func (o *ZooDiscovery) Init(config map[string]interface{}) error {
 
@@ -238,6 +240,37 @@ func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, d
 	}
 	return true
 }
+
+/* ======================== gateway ========================== */
+
+func (o *ZooDiscovery) hoook(gateway qtiny.Gateway) (*qtiny.Future, error) {
+	var future = &qtiny.Future{}
+
+	future.SetRoutine(func(event qtiny.FutureEvent, future *qtiny.Future) qtiny.FutureCallbackReturn {
+
+		var ch = o.watcher.WaitForConnected()
+		if ch != nil {
+			<-ch
+		}
+
+		var pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, gateway.GetId())
+		var pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
+
+		_, _ = o.watcher.Create(pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
+
+		_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = o.watcher.Create(pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		_, _ = o.watcher.Create(pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+
+		future.Succeed(0, nil)
+
+		return 0
+	})
+
+	return future, nil
+}
+
+/* ======================== path =========================== */
 
 func (o *ZooDiscovery) GetNanoZNodePath(address string) string {
 	return PathNano + "/" + address

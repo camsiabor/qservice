@@ -16,14 +16,10 @@ type ZooGateway struct {
 
 	connectId string
 
-	pathNodeQueue      string
-	pathNodeConnection string
+	pathNodeQueue string
 
 	consumeSemaphore sync.WaitGroup
 }
-
-const PathNodeQueue = "/qnode"
-const PathConnection = "/qconn"
 
 func (o *ZooGateway) Init(config map[string]interface{}) error {
 
@@ -34,14 +30,14 @@ func (o *ZooGateway) Init(config map[string]interface{}) error {
 		o.watcher.Logger = o.Logger
 	}
 
+	o.GetMeta()
+
 	err = o.watcher.Start(config)
 
 	if err != nil {
 		return err
 	}
 
-	o.pathNodeQueue = fmt.Sprintf("%s/%s", PathNodeQueue, o.GetId())
-	o.pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, o.GetId())
 	o.watcher.AddCallback(o.handleConnectionEvents)
 
 	return err
@@ -69,6 +65,7 @@ func (o *ZooGateway) Stop(config map[string]interface{}) error {
 			return err
 		}
 	}
+
 	return o.MemGateway.Stop(config)
 }
 
@@ -91,12 +88,7 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 			o.connectId = hostname + ":" + uuid.NewV4().String()
 		}
 
-		_, _ = watcher.Create(o.pathNodeQueue, []byte(""), 0, zk.WorldACL(zk.PermAll))
-
-		_, _ = watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(o.pathNodeConnection, []byte(""), 0, zk.WorldACL(zk.PermAll))
-		_, _ = watcher.Create(o.pathNodeConnection+"/"+o.connectId, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
-
+		o.pathNodeQueue = fmt.Sprintf("%v/%v", PathNodeQueue, o.GetId())
 		o.watcher.Watch(WatchTypeChildren, o.pathNodeQueue, o.pathNodeQueue, o.nodeQueueConsume)
 
 		if o.Logger != nil {
@@ -158,7 +150,7 @@ func (o *ZooGateway) publish(consumerAddress string, prefix string, data []byte)
 	return err
 }
 
-func (o *ZooGateway) Post(message *qtiny.Message) error {
+func (o *ZooGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 
 	if o.Queue == nil {
 		return fmt.Errorf("gateway not started yet")
@@ -171,16 +163,16 @@ func (o *ZooGateway) Post(message *qtiny.Message) error {
 	message.Sender = o.GetId()
 
 	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
-		return o.MemGateway.Post(message)
+		return o.MemGateway.Post(message, discovery)
 	}
 
 	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
-		var local, err = o.Discovery.NanoLocalGet(message.Address)
+		var local, err = discovery.NanoLocalGet(message.Address)
 		if err != nil {
 			return err
 		}
 		if local != nil {
-			return o.MemGateway.Post(message)
+			return o.MemGateway.Post(message, discovery)
 		}
 	}
 
@@ -192,12 +184,12 @@ func (o *ZooGateway) Post(message *qtiny.Message) error {
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		return o.publish(message.Address, "/r", data)
 	}
-	remote, err := o.Discovery.NanoRemoteGet(message.Address)
+	remote, err := discovery.NanoRemoteGet(message.Address)
 	if err != nil {
 		return err
 	}
 	if remote == nil {
-		return fmt.Errorf("discovery return nil remote : %v", o.Discovery)
+		return fmt.Errorf("discovery return nil remote : %v", discovery)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -216,9 +208,14 @@ func (o *ZooGateway) Post(message *qtiny.Message) error {
 	return err
 }
 
-func (o *ZooGateway) Broadcast(message *qtiny.Message) error {
+func (o *ZooGateway) Multicast(message *qtiny.Message, discovery qtiny.Discovery) error {
+	message.Type = message.Type | qtiny.MessageTypeMulticast
+	return o.Post(message, discovery)
+}
+
+func (o *ZooGateway) Broadcast(message *qtiny.Message, discovery qtiny.Discovery) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
-	return o.Post(message)
+	return o.Post(message, discovery)
 }
 
 func (o *ZooGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
@@ -267,4 +264,18 @@ func (o *ZooGateway) messageConsume(conn *zk.Conn, root string, child string) {
 
 func (o *ZooGateway) GetQueueZNodePath(nodeId string) string {
 	return PathNodeQueue + "/" + nodeId
+}
+
+func (o *ZooGateway) GetType() string {
+	return "zookeeper"
+}
+
+func (o *ZooGateway) GetMeta() map[string]interface{} {
+	if o.Meta == nil {
+		o.Meta = make(map[string]interface{})
+		o.Meta["id"] = o.GetId()
+		o.Meta["type"] = o.GetType()
+		o.Meta["endpoints"] = o.watcher.Endpoints
+	}
+	return o.Meta
 }

@@ -20,13 +20,14 @@ type MemDiscovery struct {
 
 	Listeners []chan *qtiny.Message
 
-	Discovery qtiny.Discovery
-
 	RemotesMutex sync.RWMutex
 	Remotes      map[string]*qtiny.Nano
 
 	LocalsMutex sync.RWMutex
 	Locals      map[string]*qtiny.Nano
+
+	GatewaysMutex sync.RWMutex
+	Gateways      map[string]qtiny.Gateway
 }
 
 func (o *MemDiscovery) Start(config map[string]interface{}) error {
@@ -164,6 +165,31 @@ func (o *MemDiscovery) NanoLocalAll() map[string]*qtiny.Nano {
 	return m
 }
 
+/* =============================== gateway ============================================================== */
+
+func (o *MemDiscovery) GatewayPublish(gateway qtiny.Gateway) error {
+	o.GatewaysMutex.Lock()
+	defer o.GatewaysMutex.Unlock()
+	if o.Gateways == nil {
+		o.Gateways = make(map[string]qtiny.Gateway)
+	}
+	var current = o.Gateways[gateway.GetId()]
+	if current == nil {
+		o.Gateways[gateway.GetId()] = gateway
+	}
+	return nil
+}
+
+func (o *MemDiscovery) GatewayUnpublish(gateway qtiny.Gateway) error {
+	o.GatewaysMutex.Lock()
+	defer o.GatewaysMutex.Unlock()
+	if o.Gateways == nil {
+		return nil
+	}
+	delete(o.Gateways, gateway.GetId())
+	return nil
+}
+
 /* ============================================================================================= */
 
 func (o *MemDiscovery) GetId() string {
@@ -184,12 +210,4 @@ func (o *MemDiscovery) GetLogger() *log.Logger {
 
 func (o *MemDiscovery) SetLogger(logger *log.Logger) {
 	o.Logger = logger
-}
-
-func (o *MemDiscovery) GetDiscovery() qtiny.Discovery {
-	return o.Discovery
-}
-
-func (o *MemDiscovery) SetDiscovery(discovery qtiny.Discovery) {
-	o.Discovery = discovery
 }
