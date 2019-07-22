@@ -46,14 +46,6 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 		o.nanos = make(map[string]*Nano)
 	}
 
-	if o.gateway == nil {
-		o.gateway = util.Get(config, nil, "gateway").(Gateway)
-	}
-
-	if o.gateway == nil {
-		return fmt.Errorf("gateway is null")
-	}
-
 	var err error
 
 	var pollLimit = util.GetInt(config, 8192, "poll.limit")

@@ -15,6 +15,8 @@ func GetTina() *Tina {
 }
 
 type Tina struct {
+	id string
+
 	tinaMutex sync.RWMutex
 
 	tinyMutex sync.RWMutex
@@ -42,13 +44,19 @@ func (o *Tina) Start(config map[string]interface{}) error {
 	if o.config == nil {
 		o.config = make(map[string]interface{})
 	}
+
+	o.id = util.GetStr(o.config, "", "id")
+	if len(o.id) == 0 {
+		o.id = uuid.NewV4().String()
+	}
+
 	var loggerConfig = util.GetMap(o.config, true, "logger")
 	var err = o.initLogger(loggerConfig)
 	if err != nil {
 		return err
 	}
-	var gatewayConfig = util.GetMap(o.config, true, "gateway")
-	err = o.initMicroroller(gatewayConfig)
+
+	err = o.initMicroroller(o.config)
 	return err
 }
 
@@ -75,40 +83,43 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 		panic("gateway is not set")
 	}
 
-	if o.gateway.GetLogger() == nil {
-		o.gateway.SetLogger(o.logger)
-	}
-
 	if o.discovery == nil {
 		panic("discovery is not set")
 	}
 
+	// discovery
+	o.discovery.SetId(o.id)
 	if o.discovery.GetLogger() == nil {
 		o.discovery.SetLogger(o.logger)
 	}
 
-	o.gateway.SetDiscovery(o.discovery)
+	var discoveryConfig = util.GetMap(o.config, true, "discovery")
+	if err := o.discovery.Start(discoveryConfig); err != nil {
+		return err
+	}
 
+	// gateway
+	o.gateway.SetId(o.id)
+	o.gateway.SetDiscovery(o.discovery)
+	if o.gateway.GetLogger() == nil {
+		o.gateway.SetLogger(o.logger)
+	}
+
+	var gatewayConfig = util.GetMap(o.config, true, "gateway")
+	if err := o.gateway.Start(gatewayConfig); err != nil {
+		return err
+	}
+	// microroller
 	if o.microroller == nil {
 		o.microroller = &Microroller{}
 	}
-
 	if o.microroller.GetLogger() == nil {
 		o.microroller.SetLogger(o.logger)
 	}
-
 	o.microroller.SetGateway(o.gateway)
 	o.microroller.SetDiscovery(o.discovery)
-
-	if err := o.discovery.Start(config); err != nil {
-		return err
-	}
-
-	if err := o.gateway.Start(config); err != nil {
-		return err
-	}
-
-	return o.microroller.Start(config)
+	var microrollerConfig = util.GetMap(o.config, true, "microroller")
+	return o.microroller.Start(microrollerConfig)
 }
 
 func (o *Tina) Deploy(id string, guide TinyGuideKind, config map[string]interface{}, flag TinyFlag, options TinyOptions) *Future {
@@ -214,4 +225,8 @@ func (o *Tina) GetLogger() *log.Logger {
 func (o *Tina) SetLogger(logger *log.Logger) *Tina {
 	o.logger = logger
 	return o
+}
+
+func (o *Tina) GetId() string {
+	return o.id
 }

@@ -4,6 +4,7 @@ import "log"
 
 type Gateway interface {
 	GetId() string
+	SetId(string)
 
 	GetLogger() *log.Logger
 	SetLogger(logger *log.Logger)

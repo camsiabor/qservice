@@ -131,6 +131,10 @@ func (o *MemGateway) GetId() string {
 	return o.id
 }
 
+func (o *MemGateway) SetId(id string) {
+	o.id = id
+}
+
 func (o *MemGateway) GetTag() string {
 	return o.tag
 }

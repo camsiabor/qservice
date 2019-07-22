@@ -170,6 +170,10 @@ func (o *MemDiscovery) GetId() string {
 	return o.id
 }
 
+func (o *MemDiscovery) SetId(id string) {
+	o.id = id
+}
+
 func (o *MemDiscovery) GetTag() string {
 	return o.tag
 }
