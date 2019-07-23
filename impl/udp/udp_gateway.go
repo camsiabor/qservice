@@ -8,7 +8,6 @@ import (
 
 import (
 	"fmt"
-	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
@@ -155,11 +154,11 @@ func (o *UdpGateway) Post(message *qtiny.Message) error {
 
 	message.Sender = o.GetId()
 
-	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
+	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.MemGateway.Post(message)
 	}
 
-	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
+	if message.LocalFlag&qtiny.MessageFlagRemoteOnly == 0 {
 		var local, err = o.Discovery.NanoLocalGet(message.Address)
 		if err != nil {
 			return err

@@ -266,7 +266,7 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 		_ = o.watcher.Delete(pathNodeConnection, true, true)
 	}()
 
-	var publishing = false
+	var connected = false
 	for box := range ch {
 		func() {
 			defer func() {
@@ -275,24 +275,35 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qref.StackString(1))
 				}
 			}()
-
 			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
 			if box.Event == qtiny.GatewayEventConnected {
-				publishing = true
+				connected = true
 				go func() {
-					for publishing {
+					var err error
+					for connected {
+						if err != nil {
+							time.Sleep(time.Second * 3)
+						}
 						var data, _ = json.Marshal(box.Meta)
 						_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
-						var _, err = o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
-						if err == nil {
-							publishing = false
-							return
+						_, err = o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+						if err != nil {
+							continue
 						}
-						time.Sleep(time.Second * time.Duration(5))
+						_, stat, err := o.watcher.GetConn().Get(pathNodeConnection)
+						if err != nil {
+							continue
+						}
+						if stat.EphemeralOwner != o.watcher.GetConn().SessionID() {
+							err = fmt.Errorf("no same session")
+							continue
+						}
+						o.Logger.Printf("zookeeper gateway publish %v - %v", gateway.GetType(), gateway.GetId())
+						return
 					}
 				}()
 			} else {
-				publishing = false
+				connected = false
 				_ = o.watcher.Delete(pathNodeConnection, true, true)
 			}
 		}()
@@ -340,7 +351,7 @@ func (o *ZooDiscovery) portalsWatch(event *zk.Event, stat *zk.Stat, data interfa
 
 	if len(removes) > 0 {
 
-		o.Logger.Println("portal registry removes", box.Path, removes)
+		o.Logger.Printf("portal registry %v removes %v -> [%v]", box.Path, removes, children)
 
 		for address, portal := range removes {
 			o.watcher.UnWatch(WatchTypeGet, portal.Path)
@@ -366,7 +377,7 @@ func (o *ZooDiscovery) portalsWatch(event *zk.Event, stat *zk.Stat, data interfa
 		return true
 	}
 
-	o.Logger.Println("portal registry creates", box.Path, news)
+	o.Logger.Printf("portal registry %v creates %v -> [%v]", box.Path, news, children)
 
 	for _, address := range news {
 		var portal = o.MemDiscovery.PortalCreate(address)

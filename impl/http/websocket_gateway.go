@@ -57,9 +57,9 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 		}
 		err = o.wsserver.ListenAndServe()
 		if err == nil {
-			o.Logger.Printf("websocket gateway listening to %v", o.endpoint)
+			o.Logger.Printf("websocket gateway listening to %v", o.Bind)
 		} else {
-			o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.endpoint, err.Error())
+			o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.Bind, err.Error())
 		}
 	}
 
@@ -73,6 +73,11 @@ func (o *WebsocketGateway) Start(config map[string]interface{}) error {
 			_ = o.Stop(config)
 		}
 	}()
+
+	if o.Publisher == nil {
+		o.Publisher = o.publish
+	}
+
 	err = o.MemGateway.Start(config)
 	if err == nil {
 		err = o.Init(config)
@@ -156,89 +161,17 @@ func (o *WebsocketGateway) handleRead(client *wsclient) {
 }
 
 func (o *WebsocketGateway) publish(
-	portalAddress string, message *qtiny.Message,
-	prefix string, data []byte,
-	discovery qtiny.Discovery, remote *qtiny.Nano, retry int) error {
+	messageType qtiny.MessageType,
+	portalAddress string, portal qtiny.PortalKind,
+	remote *qtiny.Nano, message *qtiny.Message,
+	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error {
 
-	var portal = discovery.PortalGet(portalAddress)
-
-	if portal == nil || len(portal.GetType()) == 0 {
-		if remote != nil && retry > 0 {
-			portalAddress = remote.PortalAddress(-1)
-			return o.publish(portalAddress, message, prefix, data, discovery, remote, retry-1)
-		}
-		return fmt.Errorf("route %v to portal address %v but no portal found", message.Address, portalAddress)
-	}
-
-	// TODO publish
+	// TODO
 
 	return nil
 }
-
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
-
-	if o.Queue == nil {
-		return fmt.Errorf("gateway not started yet")
-	}
-
-	if message.Type&qtiny.MessageTypeReply > 0 {
-		message.Address = message.Sender
-		if message.Sender == o.GetId() {
-			message.Flag = message.Flag | qtiny.MessageFlagLocalOnly
-		}
-	}
-
-	message.Sender = o.GetId()
-
-	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
-		return o.MemGateway.Post(message, discovery)
-	}
-
-	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
-		var local, err = discovery.NanoLocalGet(message.Address)
-		if err != nil {
-			return err
-		}
-		if local != nil {
-			message.Flag = message.Flag & qtiny.MessageFlagLocalOnly
-			return o.MemGateway.Post(message, discovery)
-		}
-	}
-
-	var data, err = message.ToJson()
-	if err != nil {
-		return err
-	}
-
-	if message.Type&qtiny.MessageTypeReply > 0 {
-		return o.publish(message.Address, message, "/r", data, discovery, nil, 0)
-	}
-
-	remote, err := discovery.NanoRemoteGet(message.Address)
-
-	if err != nil {
-		return err
-	}
-
-	if remote == nil {
-		return fmt.Errorf("discovery return nil remote : %v", discovery)
-	}
-
-	if message.Type&qtiny.MessageTypeBroadcast > 0 {
-		var portalAddresses = remote.PortalAddresses()
-		for i := 0; i < len(portalAddresses); i++ {
-			var consumerAddress = portalAddresses[i]
-			var perr = o.publish(consumerAddress, message, "/b", data, discovery, nil, 0)
-			if perr != nil {
-				err = perr
-			}
-		}
-	} else {
-		var portalAddress = remote.PortalAddress(-1)
-		err = o.publish(portalAddress, message, "/p", data, discovery, remote, 8)
-	}
-
-	return err
+	return o.MemGateway.Publish(message, discovery)
 }
 
 func (o *WebsocketGateway) Multicast(message *qtiny.Message, discovery qtiny.Discovery) error {

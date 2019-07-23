@@ -138,11 +138,11 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 
 	message.Sender = o.GetId()
 
-	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
+	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.MemGateway.Post(message, discovery)
 	}
 
-	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
+	if message.LocalFlag&qtiny.MessageFlagRemoteOnly == 0 {
 		var local, err = discovery.NanoLocalGet(message.Address)
 		if err != nil {
 			return err

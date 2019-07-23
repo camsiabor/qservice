@@ -134,8 +134,8 @@ func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 	}
 	message.Sender = o.id
 	var clone = message.Clone()
-	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
-		clone.Flag = qtiny.MessageFlagLocalOnly
+	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
+		clone.LocalFlag = qtiny.MessageFlagLocalOnly
 	}
 	o.Queue <- clone
 	return nil
@@ -164,23 +164,23 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
 		if message.Sender == o.GetId() {
-			message.Flag = message.Flag | qtiny.MessageFlagLocalOnly
+			message.LocalFlag = message.LocalFlag | qtiny.MessageFlagLocalOnly
 		}
 	}
 
 	message.Sender = o.GetId()
 
-	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
+	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.Post(message, discovery)
 	}
 
-	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
+	if message.LocalFlag&qtiny.MessageFlagRemoteOnly == 0 {
 		var local, err = discovery.NanoLocalGet(message.Address)
 		if err != nil {
 			return err
 		}
 		if local != nil {
-			message.Flag = message.Flag & qtiny.MessageFlagLocalOnly
+			message.LocalFlag = message.LocalFlag & qtiny.MessageFlagLocalOnly
 			return o.Post(message, discovery)
 		}
 	}
@@ -195,8 +195,8 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
-		var portal = discovery.PortalGet(message.Sender)
-		return o.Publisher(qtiny.MessageTypeReply, message.Sender, portal, nil, message, discovery, o, data)
+		var portal = discovery.PortalGet(message.Address)
+		return o.Publisher(qtiny.MessageTypeReply, message.Address, portal, nil, message, discovery, o, data)
 	}
 
 	remote, err := discovery.NanoRemoteGet(message.Address)
@@ -215,9 +215,6 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		for i := 0; i < portalCount; i++ {
 			var portalAddress = portalAddresses[i]
 			var portal = discovery.PortalGet(portalAddress)
-			if portal == nil || len(portal.GetType()) == 0 {
-				continue
-			}
 			_ = o.Publisher(qtiny.MessageTypeBroadcast, portalAddress, portal, remote, message, discovery, o, data)
 		}
 		return nil
@@ -235,9 +232,6 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	for i := 0; i < portalCount; i++ {
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
-		if portal == nil || len(portal.GetType()) == 0 {
-			continue
-		}
 		err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 		if err == nil {
 			break

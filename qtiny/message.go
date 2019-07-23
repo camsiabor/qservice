@@ -29,12 +29,13 @@ const (
 )
 
 type Message struct {
-	Type MessageType
-	Flag MessageFlag
+	Type      MessageType
+	LocalFlag MessageFlag
 
-	Address string
-	Data    interface{}
-	Timeout time.Duration
+	Address  string
+	Data     interface{}
+	Timeout  time.Duration
+	Canceled bool
 
 	Err error
 
