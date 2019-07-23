@@ -276,36 +276,45 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 				}
 			}()
 			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
-			if box.Event == qtiny.GatewayEventConnected {
-				connected = true
-				go func() {
-					var err error
-					for connected {
-						if err != nil {
-							time.Sleep(time.Second * 3)
-						}
-						var data, _ = json.Marshal(box.Meta)
-						_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
-						_, err = o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
-						if err != nil {
-							continue
-						}
-						_, stat, err := o.watcher.GetConn().Get(pathNodeConnection)
-						if err != nil {
-							continue
-						}
-						if stat.EphemeralOwner != o.watcher.GetConn().SessionID() {
-							err = fmt.Errorf("no same session")
-							continue
-						}
-						o.Logger.Printf("zookeeper gateway publish %v - %v", gateway.GetType(), gateway.GetId())
-						return
-					}
-				}()
-			} else {
+
+			if box.Event == qtiny.GatewayEventDisconnected {
 				connected = false
 				_ = o.watcher.Delete(pathNodeConnection, true, true)
+				return
 			}
+
+			if box.Event != qtiny.GatewayEventConnected {
+				return
+			}
+
+			connected = true
+			go func() {
+				var sleep = false
+				for connected {
+					if sleep {
+						time.Sleep(time.Second * 3)
+					}
+					var data, _ = json.Marshal(box.Meta)
+					_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+					_, err := o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+					if err != nil {
+						sleep = true
+						continue
+					}
+					_, stat, err := o.watcher.GetConn().Get(pathNodeConnection)
+					if err != nil || stat == nil {
+						sleep = true
+						continue
+					}
+					if stat.EphemeralOwner != o.watcher.GetConn().SessionID() {
+						sleep = true
+						continue
+					}
+					o.Logger.Printf("zookeeper gateway publish %v - %v", gateway.GetType(), gateway.GetId())
+					return
+				}
+			}()
+
 		}()
 	}
 }

@@ -117,13 +117,8 @@ func (o *Microroller) handleReply(response *Message) {
 	}
 	var request = o.requests[response.ReplyId]
 
-	o.logger.Printf("searching request %v", response.ReplyId)
-	if request == nil {
+	if request == nil || request.Canceled {
 		return
-	}
-
-	if request.Canceled {
-		o.logger.Printf("request canceld %v", response.ReplyId)
 	}
 
 	o.requests[response.ReplyId] = nil
@@ -223,7 +218,6 @@ func (o *Microroller) Post(request *Message) (response *Message, err error) {
 
 		request.ReplyId = o.generateMessageId()
 
-		o.logger.Printf("request id %v ", request.ReplyId)
 		o.requests[request.ReplyId] = request
 
 		if request.Timeout > 0 {
