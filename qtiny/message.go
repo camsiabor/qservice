@@ -38,9 +38,10 @@ type Message struct {
 
 	Err error
 
-	Sender  string
-	Replier string
-	Session string
+	Sender         string
+	Replier        string
+	Session        string
+	SessionRelated interface{}
 
 	Headers MessageHeaders
 	Options MessageOptions
@@ -197,21 +198,30 @@ func (o *Message) FromMap(m map[string]interface{}) {
 }
 
 func (o *Message) Clone() *Message {
-	var clone = &Message{}
-	clone.Type = o.Type
-	clone.Address = o.Address
-	clone.Sender = o.Sender
-	clone.Replier = o.Replier
-	clone.Session = o.Session
-	clone.Data = o.Data
-	clone.ReplyId = o.ReplyId
+	var clone = &Message{
+
+		Type:    o.Type,
+		Address: o.Address,
+		Sender:  o.Sender,
+
+		Data: o.Data,
+
+		Headers: o.Headers,
+		Options: o.Options,
+
+		Session:        o.Session,
+		SessionRelated: o.SessionRelated,
+
+		ReplyId: o.ReplyId,
+		Replier: o.Replier,
+	}
+
 	if clone.Type&MessageTypeReply > 0 {
 		clone.ReplyCode = o.ReplyCode
 		clone.ReplyErr = o.ReplyErr
 		clone.ReplyData = o.ReplyData
 		clone.ReplyErr = o.ReplyErr
 	}
-	clone.Headers = o.Headers
-	clone.Options = o.Options
+
 	return clone
 }

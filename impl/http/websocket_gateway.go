@@ -2,11 +2,12 @@ package http
 
 import (
 	"fmt"
-	"github.com/camsiabor/go-zookeeper/zk"
+	"github.com/camsiabor/qcom/qnet"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/memory"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/gorilla/websocket"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -16,7 +17,10 @@ import (
 type WebsocketGateway struct {
 	memory.MemGateway
 
-	endpoint string
+	Bind string
+
+	Endpoints []string
+	IPS       []string
 
 	wsserver *http.Server
 
@@ -39,7 +43,8 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 
 	o.GetMeta()
 
-	o.endpoint = util.GetStr(config, ":8080", "endpoint")
+	o.Bind = util.GetStr(config, ":8080", "bind")
+	o.Endpoints = util.GetStringSlice(config, "endpoints")
 
 	if o.wsupgrader == nil {
 		o.wsupgrader = &websocket.Upgrader{}
@@ -47,7 +52,7 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 
 	if o.wsserver == nil {
 		o.wsserver = &http.Server{
-			Addr:    o.endpoint,
+			Addr:    o.Bind,
 			Handler: o,
 		}
 		err = o.wsserver.ListenAndServe()
@@ -114,6 +119,40 @@ func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http
 		o.wsclients[client.id] = client
 	}()
 
+	go o.handleRead(client)
+}
+
+func (o *WebsocketGateway) handleRead(client *wsclient) {
+	defer func() {
+		o.wsclientsMutex.Lock()
+		defer o.wsclientsMutex.Unlock()
+		delete(o.wsclients, client.id)
+	}()
+	defer func() {
+		client.conn.Close()
+	}()
+
+	for {
+		messageType, data, err := client.conn.ReadMessage()
+		if err != nil {
+			log.Printf("websocket %v read message error %v", client.id, err.Error())
+			break
+		}
+		func() {
+			defer func() {
+				var pan = recover()
+				if pan != nil {
+					o.Logger.Printf("parse %v message codec fail %v", client.id, util.AsError(pan).Error())
+				}
+			}()
+			var message = &qtiny.Message{}
+			message.FromJson(data)
+			message.Session = client.id
+			message.SessionRelated = messageType
+			o.Queue <- message
+		}()
+	}
+
 }
 
 func (o *WebsocketGateway) publish(
@@ -174,10 +213,13 @@ func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discover
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		return o.publish(message.Address, message, "/r", data, discovery, nil, 0)
 	}
+
 	remote, err := discovery.NanoRemoteGet(message.Address)
+
 	if err != nil {
 		return err
 	}
+
 	if remote == nil {
 		return fmt.Errorf("discovery return nil remote : %v", discovery)
 	}
@@ -195,6 +237,7 @@ func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discover
 		var portalAddress = remote.PortalAddress(-1)
 		err = o.publish(portalAddress, message, "/p", data, discovery, remote, 8)
 	}
+
 	return err
 }
 
@@ -206,54 +249,6 @@ func (o *WebsocketGateway) Multicast(message *qtiny.Message, discovery qtiny.Dis
 func (o *WebsocketGateway) Broadcast(message *qtiny.Message, discovery qtiny.Discovery) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
 	return o.Post(message, discovery)
-}
-
-func (o *WebsocketGateway) nodeQueueConsume(event *zk.Event, stat *zk.Stat, data interface{}, box *WatchBox, watcher *ZooWatcher, err error) bool {
-	if err != nil {
-		if o.Logger != nil {
-			o.Logger.Println("node queue consume error", err.Error())
-		}
-		return true
-	}
-	if data == nil {
-		return true
-	}
-	var children, ok = data.([]string)
-	if !ok {
-		return true
-	}
-	var n = len(children)
-	if n == 0 {
-		return true
-	}
-	var root = box.GetPath()
-	var conn = o.watcher.GetConn()
-
-	for i := 0; i < n; i++ {
-		o.consumeSemaphore.Add(1)
-		go o.messageConsume(conn, root, children[i])
-	}
-	o.consumeSemaphore.Wait()
-
-	return true
-}
-
-func (o *WebsocketGateway) messageConsume(conn *zk.Conn, root string, child string) {
-	defer o.consumeSemaphore.Done()
-	var path = root + "/" + child
-	var data, stat, err = conn.Get(path)
-	if err != nil {
-		return
-	}
-	var msg = &qtiny.Message{}
-	_ = msg.FromJson(data)
-	msg.Timeout = 0
-	o.Queue <- msg
-	_ = conn.Delete(path, stat.Version)
-}
-
-func (o *WebsocketGateway) GetQueueZNodePath(nodeId string) string {
-	return o.pathRootQueue + "/" + nodeId
 }
 
 func (o *WebsocketGateway) GetType() string {
@@ -269,7 +264,16 @@ func (o *WebsocketGateway) GetMeta() map[string]interface{} {
 		o.Meta["hostname"] = hostname
 	}
 	if o.Meta["endpoints"] == nil {
-		o.Meta["endpoints"] = o.watcher.Endpoints
+		o.Meta["endpoints"] = o.Endpoints
 	}
+
+	if o.Meta["ips"] == nil {
+		var ips, err = qnet.AllNetInterfaceIPString()
+		if err != nil && o.Logger != nil {
+			o.Logger.Printf("get all net interface ip fail %v", err.Error())
+		}
+		o.Meta["ips"] = ips
+	}
+
 	return o.Meta
 }
