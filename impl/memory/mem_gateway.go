@@ -9,6 +9,11 @@ import (
 	"sync"
 )
 
+type PublishHandler func(messageType qtiny.MessageType,
+	portalAddress string, portal qtiny.PortalKind,
+	remote *qtiny.Nano, message *qtiny.Message,
+	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error
+
 type MemGateway struct {
 	id  string
 	tag string
@@ -27,6 +32,8 @@ type MemGateway struct {
 
 	EventChannelsMutex sync.RWMutex
 	EventChannels      map[string]chan *qtiny.GatewayEventBox
+
+	Publisher PublishHandler
 }
 
 func (o *MemGateway) Start(config map[string]interface{}) error {
@@ -142,6 +149,106 @@ func (o *MemGateway) Multicast(message *qtiny.Message, discovery qtiny.Discovery
 func (o *MemGateway) Broadcast(message *qtiny.Message, discovery qtiny.Discovery) error {
 	message.Type = message.Type | qtiny.MessageTypeBroadcast
 	return o.Post(message, discovery)
+}
+
+func (o *MemGateway) IsPortalValid(portal qtiny.PortalKind) bool {
+	return portal == nil && len(portal.GetType()) > 0
+}
+
+func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) error {
+
+	if o.Queue == nil {
+		return fmt.Errorf("gateway %v not started yet", o.id)
+	}
+
+	if message.Type&qtiny.MessageTypeReply > 0 {
+		message.Address = message.Sender
+		if message.Sender == o.GetId() {
+			message.Flag = message.Flag | qtiny.MessageFlagLocalOnly
+		}
+	}
+
+	message.Sender = o.GetId()
+
+	if message.Flag&qtiny.MessageFlagLocalOnly > 0 {
+		return o.Post(message, discovery)
+	}
+
+	if message.Flag&qtiny.MessageFlagRemoteOnly == 0 {
+		var local, err = discovery.NanoLocalGet(message.Address)
+		if err != nil {
+			return err
+		}
+		if local != nil {
+			message.Flag = message.Flag & qtiny.MessageFlagLocalOnly
+			return o.Post(message, discovery)
+		}
+	}
+
+	if o.Publisher == nil {
+		return fmt.Errorf("gateway %v publisher is not set", o.id)
+	}
+
+	var data, err = message.ToJson()
+	if err != nil {
+		return err
+	}
+
+	if message.Type&qtiny.MessageTypeReply > 0 {
+		var portal = discovery.PortalGet(message.Sender)
+		return o.Publisher(qtiny.MessageTypeReply, message.Sender, portal, nil, message, discovery, o, data)
+	}
+
+	remote, err := discovery.NanoRemoteGet(message.Address)
+
+	if err != nil {
+		return err
+	}
+
+	if remote == nil {
+		return fmt.Errorf("discovery return nil remote : %v", discovery)
+	}
+
+	if message.Type&qtiny.MessageTypeBroadcast > 0 {
+		var portalAddresses = remote.PortalAddresses()
+		var portalCount = len(portalAddresses)
+		for i := 0; i < portalCount; i++ {
+			var portalAddress = portalAddresses[i]
+			var portal = discovery.PortalGet(portalAddress)
+			if portal == nil || len(portal.GetType()) == 0 {
+				continue
+			}
+			_ = o.Publisher(qtiny.MessageTypeBroadcast, portalAddress, portal, remote, message, discovery, o, data)
+		}
+		return nil
+	}
+
+	if message.Type&qtiny.MessageTypeMulticast > 0 {
+		return fmt.Errorf("multicast is not implement")
+	}
+
+	var portalAddresses, pointer = remote.PortalPointer()
+	if portalAddresses == nil {
+		return fmt.Errorf("portal addresses is empty for %v", message.Address)
+	}
+	var portalCount = len(portalAddresses)
+	for i := 0; i < portalCount; i++ {
+		var portalAddress = portalAddresses[pointer]
+		var portal = discovery.PortalGet(portalAddress)
+		if portal == nil || len(portal.GetType()) == 0 {
+			continue
+		}
+		err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
+		if err == nil {
+			break
+		}
+		pointer++
+		if pointer >= portalCount {
+			pointer = 0
+		}
+
+	}
+	return err
 }
 
 /* ============================================================================================= */

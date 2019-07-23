@@ -35,11 +35,11 @@ type Nano struct {
 	localAlpha *Nano
 	localMutex sync.RWMutex
 
-	portalMutex sync.RWMutex
-	portalIndex int32
-	portalCount int
-	portalArray []string
-	portals     map[string]interface{}
+	portalMutex   sync.RWMutex
+	portalPointer int32
+	portalCount   int
+	portalArray   []string
+	portals       map[string]interface{}
 
 	callbacks []NanoCallback
 }
@@ -228,14 +228,34 @@ func (o *Nano) PortalAddress(index int32) string {
 	if o.portalArray == nil {
 		return ""
 	}
-	if index < 0 || int(index) >= len(o.portalArray) {
-		index = atomic.AddInt32(&o.portalIndex, 1)
-		if int(index) >= len(o.portalArray) {
+	var array = o.portalArray
+	var n = len(array)
+	if index < 0 || int(index) >= n {
+		index = atomic.AddInt32(&o.portalPointer, 1)
+		if int(index) >= n {
 			index = 0
-			o.portalIndex = 0
+			o.portalPointer = 0
 		}
 	}
-	return o.portalArray[index]
+	return array[index]
+}
+
+func (o *Nano) PortalPointer() ([]string, int) {
+	var array = o.portalArray
+	if array == nil {
+		return nil, 0
+	}
+	var n = len(array)
+	var pointer = int(atomic.AddInt32(&o.portalPointer, 1))
+	if pointer >= n {
+		pointer = 0
+		o.portalPointer = 0
+	}
+	return array, pointer
+}
+
+func (o *Nano) PortalCount() int {
+	return o.portalCount
 }
 
 func (o *Nano) GatewayGetData(address string) interface{} {

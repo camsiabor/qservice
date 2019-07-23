@@ -252,7 +252,7 @@ func (o *WebsocketGateway) Broadcast(message *qtiny.Message, discovery qtiny.Dis
 }
 
 func (o *WebsocketGateway) GetType() string {
-	return "zookeeper"
+	return "websocket"
 }
 
 func (o *WebsocketGateway) GetMeta() map[string]interface{} {
