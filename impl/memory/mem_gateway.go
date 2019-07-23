@@ -163,12 +163,12 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
-		if message.Sender == o.GetId() {
+		if message.Sender == o.id {
 			message.LocalFlag = message.LocalFlag | qtiny.MessageFlagLocalOnly
 		}
 	}
 
-	message.Sender = o.GetId()
+	message.Sender = o.id
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.Post(message, discovery)
@@ -206,7 +206,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if remote == nil {
-		return fmt.Errorf("discovery return nil remote : %v", discovery)
+		return fmt.Errorf("%v discovery return nil remote : %v", o.id, discovery)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -226,7 +226,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	var portalAddresses, pointer = remote.PortalPointer()
 	if portalAddresses == nil {
-		return fmt.Errorf("portal addresses is empty for %v", message.Address)
+		return fmt.Errorf("%v portal addresses is empty for %v", o.id, message.Address)
 	}
 	var portalCount = len(portalAddresses)
 	for i := 0; i < portalCount; i++ {

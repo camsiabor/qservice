@@ -24,13 +24,16 @@ type WebsocketGateway struct {
 
 	wsserver *http.Server
 
-	wsclientsMutex sync.RWMutex
-	wsclients      map[string]*wsclient
+	wssessionsMutex sync.RWMutex
+	wssessions      map[string]*wssession
+
+	wsportalsMutex sync.RWMutex
+	wsportals      map[string]*wssession
 
 	wsupgrader *websocket.Upgrader
 }
 
-type wsclient struct {
+type wssession struct {
 	id       string
 	conn     *websocket.Conn
 	request  *http.Request
@@ -68,6 +71,7 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 
 func (o *WebsocketGateway) Start(config map[string]interface{}) error {
 	var err error
+
 	defer func() {
 		if err != nil {
 			_ = o.Stop(config)
@@ -78,6 +82,9 @@ func (o *WebsocketGateway) Start(config map[string]interface{}) error {
 		o.Publisher = o.publish
 	}
 
+	o.wsportals = make(map[string]*wssession)
+	o.wssessions = make(map[string]*wssession)
+
 	err = o.MemGateway.Start(config)
 	if err == nil {
 		err = o.Init(config)
@@ -87,10 +94,27 @@ func (o *WebsocketGateway) Start(config map[string]interface{}) error {
 
 func (o *WebsocketGateway) Stop(config map[string]interface{}) error {
 
+	o.Mutex.Lock()
+	defer o.Mutex.Unlock()
+
 	if o.wsserver != nil {
 		_ = o.wsserver.Close()
 		o.wsserver = nil
 		o.Logger.Printf("websocket gateway close")
+	}
+
+	if o.wsportals != nil {
+		for _, wsportal := range o.wsportals {
+			wsportal.conn.Close()
+		}
+		o.wsportals = nil
+	}
+
+	if o.wssessions != nil {
+		for _, session := range o.wssessions {
+			session.conn.Close()
+		}
+		o.wssessions = nil
 	}
 
 	return o.MemGateway.Stop(config)
@@ -108,30 +132,27 @@ func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http
 		return
 	}
 
-	var client = &wsclient{
+	var session = &wssession{
 		conn:     conn,
 		request:  request,
 		timeConn: time.Now(),
 	}
-	client.id = fmt.Sprintf("%v:%v", request.RemoteAddr, time.Now().Nanosecond())
+	session.id = fmt.Sprintf("%v:%v", request.RemoteAddr, time.Now().Nanosecond())
 
 	func() {
-		o.wsclientsMutex.Lock()
-		defer o.wsclientsMutex.Unlock()
-		if o.wsclients == nil {
-			o.wsclients = make(map[string]*wsclient)
-		}
-		o.wsclients[client.id] = client
+		o.wssessionsMutex.Lock()
+		defer o.wssessionsMutex.Unlock()
+		o.wssessions[session.id] = session
 	}()
 
-	go o.handleRead(client)
+	go o.handleRead(session)
 }
 
-func (o *WebsocketGateway) handleRead(client *wsclient) {
+func (o *WebsocketGateway) handleRead(client *wssession) {
 	defer func() {
-		o.wsclientsMutex.Lock()
-		defer o.wsclientsMutex.Unlock()
-		delete(o.wsclients, client.id)
+		o.wssessionsMutex.Lock()
+		defer o.wssessionsMutex.Unlock()
+		delete(o.wssessions, client.id)
 	}()
 	defer func() {
 		client.conn.Close()
@@ -166,7 +187,15 @@ func (o *WebsocketGateway) publish(
 	remote *qtiny.Nano, message *qtiny.Message,
 	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error {
 
-	// TODO
+	o.wsportalsMutex.RLock()
+	var wsportal = o.wsportals[portalAddress]
+	o.wsportalsMutex.RUnlock()
+
+	wsportal.conn, _, err = websocket.DefaultDialer.Dial("", nil)
+
+	if portal == nil || len(portal.GetType()) == 0 {
+		return fmt.Errorf("invalid portal %v", portalAddress)
+	}
 
 	return nil
 }

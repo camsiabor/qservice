@@ -288,35 +288,39 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 			}
 
 			connected = true
-			go func() {
-				var sleep = false
-				for connected {
-					if sleep {
-						time.Sleep(time.Second * 3)
-					}
-					var data, _ = json.Marshal(box.Meta)
-					_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
-					_, err := o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
-					if err != nil {
-						sleep = true
-						continue
-					}
-					_, stat, err := o.watcher.GetConn().Get(pathNodeConnection)
-					if err != nil || stat == nil {
-						sleep = true
-						continue
-					}
-					if stat.EphemeralOwner != o.watcher.GetConn().SessionID() {
-						sleep = true
-						continue
-					}
-					o.Logger.Printf("zookeeper gateway publish %v - %v", gateway.GetType(), gateway.GetId())
-					return
-				}
-			}()
+			go o.gatewayPublish(&connected, box, pathNodeConnection, gateway)
 
 		}()
 	}
+}
+
+func (o *ZooDiscovery) gatewayPublish(connected *bool, box *qtiny.GatewayEventBox, pathNodeConnection string, gateway qtiny.Gateway) {
+
+	var sleep = false
+	for *connected {
+		if sleep {
+			time.Sleep(time.Second * 3)
+		}
+		var data, _ = json.Marshal(box.Meta)
+		_, _ = o.watcher.Create(PathConnection, []byte(""), 0, zk.WorldACL(zk.PermAll), false)
+		_, err := o.watcher.Create(pathNodeConnection, data, zk.FlagEphemeral, zk.WorldACL(zk.PermAll), true)
+		if err != nil {
+			sleep = true
+			continue
+		}
+		_, stat, err := o.watcher.GetConn().Get(pathNodeConnection)
+		if err != nil || stat == nil {
+			sleep = true
+			continue
+		}
+		if stat.EphemeralOwner != o.watcher.GetConn().SessionID() {
+			sleep = true
+			continue
+		}
+		o.Logger.Printf("zookeeper gateway publish %v - %v", gateway.GetType(), gateway.GetId())
+		return
+	}
+
 }
 
 /* ======================== portal ========================= */
