@@ -18,15 +18,16 @@ type WebsocketGateway struct {
 
 	endpoint string
 
-	server *http.Server
+	wsserver *http.Server
 
-	clientsMutex sync.RWMutex
-	clients      map[string]*wsclient
+	wsclientsMutex sync.RWMutex
+	wsclients      map[string]*wsclient
 
 	wsupgrader *websocket.Upgrader
 }
 
 type wsclient struct {
+	id       string
 	conn     *websocket.Conn
 	request  *http.Request
 	timeConn time.Time
@@ -44,15 +45,17 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 		o.wsupgrader = &websocket.Upgrader{}
 	}
 
-	if o.server == nil {
-		o.server = &http.Server{
+	if o.wsserver == nil {
+		o.wsserver = &http.Server{
 			Addr:    o.endpoint,
 			Handler: o,
 		}
-	}
-
-	if err != nil {
-		return err
+		err = o.wsserver.ListenAndServe()
+		if err == nil {
+			o.Logger.Printf("websocket gateway listening to %v", o.endpoint)
+		} else {
+			o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.endpoint, err.Error())
+		}
 	}
 
 	return err
@@ -74,9 +77,10 @@ func (o *WebsocketGateway) Start(config map[string]interface{}) error {
 
 func (o *WebsocketGateway) Stop(config map[string]interface{}) error {
 
-	if o.server != nil {
-		o.server.Close()
-		o.server = nil
+	if o.wsserver != nil {
+		_ = o.wsserver.Close()
+		o.wsserver = nil
+		o.Logger.Printf("websocket gateway close")
 	}
 
 	return o.MemGateway.Stop(config)
@@ -85,13 +89,13 @@ func (o *WebsocketGateway) Stop(config map[string]interface{}) error {
 func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 
 	if request.Proto != "ws" && request.Proto != "wss" {
-		// TODO
 		return
 	}
 
 	var conn, err = o.wsupgrader.Upgrade(response, request, nil)
 	if err != nil {
-
+		o.Logger.Printf("update request to ws connection %v fail %v", request.RemoteAddr, err.Error())
+		return
 	}
 
 	var client = &wsclient{
@@ -99,37 +103,17 @@ func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http
 		request:  request,
 		timeConn: time.Now(),
 	}
+	client.id = fmt.Sprintf("%v:%v", request.RemoteAddr, time.Now().Nanosecond())
 
 	func() {
-		o.clientsMutex.Lock()
-		defer o.clientsMutex.Unlock()
-		if o.clients == nil {
-			o.clients = make(map[string]*wsclient)
+		o.wsclientsMutex.Lock()
+		defer o.wsclientsMutex.Unlock()
+		if o.wsclients == nil {
+			o.wsclients = make(map[string]*wsclient)
 		}
+		o.wsclients[client.id] = client
 	}()
 
-}
-
-func (o *WebsocketGateway) loop() {
-	var ok bool
-	var msg *qtiny.Message
-	for {
-		select {
-		case msg, ok = <-o.Queue:
-			if !ok {
-				break
-			}
-			if o.Listeners == nil {
-				continue
-			}
-		}
-		if msg != nil {
-			var n = len(o.Listeners)
-			for i := 0; i < n; i++ {
-				o.Listeners[i] <- msg
-			}
-		}
-	}
 }
 
 func (o *WebsocketGateway) Poll(limit int) (chan *qtiny.Message, error) {
@@ -168,12 +152,9 @@ func (o *WebsocketGateway) publish(
 		return fmt.Errorf("route %v to portal address %v but no portal found", message.Address, portalAddress)
 	}
 
-	var uri = o.GetQueueZNodePath(portalAddress)
-	var _, err = o.watcher.GetConn().Create(uri+prefix, data, zk.FlagEphemeral|zk.FlagSequence, zk.WorldACL(zk.PermAll))
-	if err != nil && o.Logger != nil {
-		o.Logger.Println("publish error ", err.Error())
-	}
-	return err
+	// TODO publish
+
+	return nil
 }
 
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {

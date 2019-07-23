@@ -57,7 +57,7 @@ func (o *MemGateway) Start(config map[string]interface{}) error {
 	}
 
 	o.Looping = true
-	go o.Loop()
+	go o.DispatchLoop()
 	return nil
 }
 
@@ -74,7 +74,7 @@ func (o *MemGateway) Stop(map[string]interface{}) error {
 	return nil
 }
 
-func (o *MemGateway) Loop() {
+func (o *MemGateway) DispatchLoop() {
 	var ok bool
 	var msg *qtiny.Message
 	for o.Looping {

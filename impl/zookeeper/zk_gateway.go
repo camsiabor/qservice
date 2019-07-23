@@ -115,28 +115,6 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 	}
 }
 
-func (o *ZooGateway) loop() {
-	var ok bool
-	var msg *qtiny.Message
-	for {
-		select {
-		case msg, ok = <-o.Queue:
-			if !ok {
-				break
-			}
-			if o.Listeners == nil {
-				continue
-			}
-		}
-		if msg != nil {
-			var n = len(o.Listeners)
-			for i := 0; i < n; i++ {
-				o.Listeners[i] <- msg
-			}
-		}
-	}
-}
-
 func (o *ZooGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 	if limit <= 0 {
