@@ -116,27 +116,6 @@ func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http
 
 }
 
-func (o *WebsocketGateway) Poll(limit int) (chan *qtiny.Message, error) {
-
-	if limit <= 0 {
-		limit = 8192
-	}
-
-	var ch = make(chan *qtiny.Message, limit)
-
-	o.Mutex.Lock()
-	defer o.Mutex.Unlock()
-
-	if o.Listeners == nil {
-		o.Listeners = make([]chan *qtiny.Message, 1)
-		o.Listeners[0] = ch
-	} else {
-		o.Listeners = append(o.Listeners, ch)
-	}
-
-	return ch, nil
-}
-
 func (o *WebsocketGateway) publish(
 	portalAddress string, message *qtiny.Message,
 	prefix string, data []byte,

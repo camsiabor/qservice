@@ -126,27 +126,6 @@ func (o *EtcdGateway) handleEvent(event EtcdWatcherEvent, watcher *EtcdWatcher, 
 
 }
 
-func (o *EtcdGateway) Poll(limit int) (chan *qtiny.Message, error) {
-
-	if limit <= 0 {
-		limit = 8192
-	}
-
-	var ch = make(chan *qtiny.Message, limit)
-
-	o.Mutex.Lock()
-	defer o.Mutex.Unlock()
-
-	if o.Listeners == nil {
-		o.Listeners = make([]chan *qtiny.Message, 1)
-		o.Listeners[0] = ch
-	} else {
-		o.Listeners = append(o.Listeners, ch)
-	}
-
-	return ch, nil
-}
-
 func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 
 	if o.Queue == nil {
