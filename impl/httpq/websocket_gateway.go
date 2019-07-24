@@ -1,4 +1,4 @@
-package http
+package httpq
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ import (
 type WebsocketGateway struct {
 	memory.MemGateway
 
-	Bind string
+	Port int
 
 	Endpoints []string
 	IPS       []string
@@ -46,7 +46,7 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 
 	o.GetMeta()
 
-	o.Bind = util.GetStr(config, ":8080", "bind")
+	o.Port = util.GetInt(config, 8080, "port")
 	o.Endpoints = util.GetStringSlice(config, "endpoints")
 
 	if o.wsupgrader == nil {
@@ -55,15 +55,20 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 
 	if o.wsserver == nil {
 		o.wsserver = &http.Server{
-			Addr:    o.Bind,
+			Addr:    fmt.Sprintf(":%v", o.Port),
 			Handler: o,
 		}
-		err = o.wsserver.ListenAndServe()
-		if err == nil {
-			o.Logger.Printf("websocket gateway listening to %v", o.Bind)
-		} else {
-			o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.Bind, err.Error())
-		}
+
+		// TODO connect event
+		go func() {
+			o.Logger.Printf("websocket gateway listening to %v", o.Port)
+			err = o.wsserver.ListenAndServe()
+			if err != nil {
+				o.wsserver = nil
+				o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.Port, err.Error())
+			}
+		}()
+
 	}
 
 	return err
@@ -191,7 +196,11 @@ func (o *WebsocketGateway) publish(
 	var wsportal = o.wsportals[portalAddress]
 	o.wsportalsMutex.RUnlock()
 
+	var err error
 	wsportal.conn, _, err = websocket.DefaultDialer.Dial("", nil)
+	if err != nil {
+
+	}
 
 	if portal == nil || len(portal.GetType()) == 0 {
 		return fmt.Errorf("invalid portal %v", portalAddress)
@@ -227,6 +236,10 @@ func (o *WebsocketGateway) GetMeta() map[string]interface{} {
 	}
 	if o.Meta["endpoints"] == nil {
 		o.Meta["endpoints"] = o.Endpoints
+	}
+
+	if o.Meta["port"] == nil && o.Port > 0 {
+		o.Meta["port"] = o.Port
 	}
 
 	if o.Meta["ips"] == nil {

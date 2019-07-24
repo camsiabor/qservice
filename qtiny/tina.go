@@ -79,6 +79,8 @@ func (o *Tina) initLogger(map[string]interface{}) error {
 
 func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
+	o.logger.Printf("tina %v initiating", o.id)
+
 	if o.gateway == nil {
 		panic("gateway is not set")
 	}
