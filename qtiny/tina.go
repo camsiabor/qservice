@@ -15,7 +15,7 @@ func GetTina() *Tina {
 }
 
 type Tina struct {
-	id string
+	nodeId string
 
 	tinaMutex sync.RWMutex
 
@@ -48,9 +48,9 @@ func (o *Tina) Start(config map[string]interface{}) error {
 		o.config = make(map[string]interface{})
 	}
 
-	o.id = util.GetStr(o.config, "", "id")
-	if len(o.id) == 0 {
-		o.id = uuid.NewV4().String()
+	o.nodeId = util.GetStr(o.config, "", "id")
+	if len(o.nodeId) == 0 {
+		o.nodeId = uuid.NewV4().String()
 	}
 
 	var loggerConfig = util.GetMap(o.config, true, "logger")
@@ -82,7 +82,7 @@ func (o *Tina) initLogger(map[string]interface{}) error {
 
 func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
-	o.logger.Printf("tina %v initiating", o.id)
+	o.logger.Printf("tina %v initiating", o.nodeId)
 
 	if o.gateways == nil {
 		panic("gateway is not set")
@@ -93,11 +93,11 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 	}
 
 	// discovery
-	o.discovery.SetNodeId(o.id)
+	o.discovery.SetNodeId(o.nodeId)
 
 	for gatekey, gateway := range o.gateways {
 		gateway.SetId(gatekey)
-		gateway.SetNodeId(o.id)
+		gateway.SetNodeId(o.nodeId)
 		if gateway.GetLogger() == nil {
 			gateway.SetLogger(o.logger)
 		}
@@ -214,7 +214,7 @@ func (o *Tina) SetGateways(gateways map[string]Gateway, gatewaydef string) *Tina
 
 	for gatekey, gateway := range gateways {
 		gateway.SetId(gatekey)
-		gateway.SetNodeId(o.id)
+		gateway.SetNodeId(o.nodeId)
 		if len(gatewaydef) == 0 {
 			gatewaydef = gatekey
 		}
@@ -258,6 +258,6 @@ func (o *Tina) SetLogger(logger *log.Logger) *Tina {
 	return o
 }
 
-func (o *Tina) GetId() string {
-	return o.id
+func (o *Tina) GetNodeId() string {
+	return o.nodeId
 }
