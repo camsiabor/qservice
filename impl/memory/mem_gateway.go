@@ -169,6 +169,13 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		return fmt.Errorf("gateway %v not started yet", o.Id)
 	}
 
+	if message.Gatekey != o.Id {
+		var sibling = discovery.GatewayGet(message.Gatekey)
+		if sibling != nil {
+			return sibling.Post(message, discovery)
+		}
+	}
+
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
 		if message.Sender == o.Id {
@@ -290,7 +297,7 @@ func (o *MemGateway) GetType() string {
 func (o *MemGateway) GetMeta() map[string]interface{} {
 	if o.Meta == nil {
 		o.Meta = make(map[string]interface{})
-		o.Meta["id"] = o.GetId()
+		o.Meta["id"] = o.Id
 		o.Meta["type"] = o.GetType()
 	}
 	return o.Meta
