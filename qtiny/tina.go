@@ -208,17 +208,16 @@ func (o *Tina) Undeploy(tinyId string) *Future {
 
 func (o *Tina) SetGateways(gateways map[string]Gateway, gatewaydef string) *Tina {
 
-	if len(gatewaydef) == 0 {
-		panic("no default gateway is set")
-	}
-
-	if gateways[gatewaydef] == nil {
+	if len(gatewaydef) > 0 && gateways[gatewaydef] == nil {
 		panic("default gateway not found in arguments " + gatewaydef)
 	}
 
-	for gatekey, gateway := range o.gateways {
+	for gatekey, gateway := range gateways {
 		gateway.SetId(gatekey)
 		gateway.SetNodeId(o.id)
+		if len(gatewaydef) == 0 {
+			gatewaydef = gatekey
+		}
 	}
 
 	o.gatewaysMutex.Lock()

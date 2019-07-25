@@ -306,14 +306,10 @@ func (o *Microroller) getGatewayLinger(gatekey string, usedef bool) *gatewayLing
 	return linger
 }
 
-func (o *Microroller) SetGateways(gateways map[string]Gateway, defgateway string) *Microroller {
+func (o *Microroller) SetGateways(gateways map[string]Gateway, gatewaydef string) *Microroller {
 
-	if len(defgateway) == 0 {
-		panic("no default gateway is set")
-	}
-
-	if gateways[defgateway] == nil {
-		panic("default gateway not found in arguments " + defgateway)
+	if len(gatewaydef) > 0 && gateways[gatewaydef] == nil {
+		panic("default gateway not found in arguments " + gatewaydef)
 	}
 
 	o.gateways = make(map[string]*gatewayLinger)
@@ -325,7 +321,10 @@ func (o *Microroller) SetGateways(gateways map[string]Gateway, defgateway string
 			gateway.SetId(gatekey)
 		}
 		o.gateways[gatekey] = linger
-		if gatekey == defgateway {
+		if len(gatewaydef) == 0 {
+			gatewaydef = gatekey
+		}
+		if gatekey == gatewaydef {
 			o.gatewaydef = linger
 		}
 	}

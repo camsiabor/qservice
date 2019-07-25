@@ -258,17 +258,19 @@ func (o *WebsocketGateway) publish(
 	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error {
 
 	var wsportal = o.portalSessionGet(portalAddress)
+
 	if wsportal.conn == nil {
+
+		if portal == nil || len(portal.GetType()) == 0 {
+			return fmt.Errorf("invalid portal %v", portalAddress)
+		}
+
 		if err := o.portalSessionConnect(wsportal, portal, portalAddress); err != nil {
 			return err
 		}
 	}
 
-	if portal == nil || len(portal.GetType()) == 0 {
-		return fmt.Errorf("invalid portal %v", portalAddress)
-	}
-
-	return nil
+	return wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	return o.MemGateway.Publish(message, discovery)
