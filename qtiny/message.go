@@ -3,6 +3,7 @@ package qtiny
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/camsiabor/qcom/qref"
 	"github.com/camsiabor/qcom/util"
 	"time"
 )
@@ -12,8 +13,8 @@ type MessageHeaders map[string]interface{}
 
 type MessageHandler func(message *Message)
 
-type MessageType int
-type MessageFlag int
+type MessageType uint32
+type MessageFlag uint32
 
 const (
 	MessageTypeSend      MessageType = 0x0001
@@ -29,8 +30,10 @@ const (
 )
 
 type Message struct {
-	Type      MessageType
+	Type MessageType
+
 	LocalFlag MessageFlag
+	ShareFlag MessageFlag
 
 	Address string
 	Gatekey string
@@ -51,6 +54,7 @@ type Message struct {
 
 	ReplyId      uint64
 	ReplyErr     string
+	ReplyTrace   string
 	ReplyCode    int
 	ReplyData    interface{}
 	ReplyChannel chan *Message
@@ -90,6 +94,8 @@ func (o *Message) Error(code int, errmsg string) error {
 	o.Type = MessageTypeReply | MessageTypeFail
 	o.ReplyCode = code
 	o.ReplyErr = errmsg
+	// TODO refactor
+	o.ReplyTrace = qref.StackString(1)
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
@@ -160,9 +166,12 @@ func (o *Message) FromJson(data []byte) error {
 
 func (o *Message) ToMap() map[string]interface{} {
 	var m = map[string]interface{}{
-		"Type":      o.Type,
-		"Address":   o.Address,
-		"Gatekey":   o.Address,
+		"Type":    o.Type,
+		"Address": o.Address,
+		"Gatekey": o.Gatekey,
+
+		"ShareFlag": o.ShareFlag,
+
 		"Sender":    o.Sender,
 		"Replier":   o.Replier,
 		"Session":   o.Session,
@@ -177,6 +186,11 @@ func (o *Message) ToMap() map[string]interface{} {
 	if len(o.ReplyErr) > 0 {
 		m["ReplyErr"] = o.ReplyErr
 	}
+
+	if len(o.ReplyTrace) > 0 {
+		m["ReplyTrace"] = o.ReplyTrace
+	}
+
 	if o.Headers != nil {
 		m["Headers"] = o.Headers
 	}
@@ -187,31 +201,42 @@ func (o *Message) ToMap() map[string]interface{} {
 }
 
 func (o *Message) FromMap(m map[string]interface{}) {
-	o.Type = MessageType(util.AsInt(m["Type"], 0))
+	o.Type = MessageType(util.AsUInt32(m["Type"], 0))
+
 	o.Address = util.AsStr(m["Address"], "")
 	o.Gatekey = util.AsStr(m["Gatekey"], "")
+
 	o.Sender = util.AsStr(m["Sender"], "")
-	o.Replier = util.AsStr(m["Replier"], "")
+
 	o.Session = util.AsStr(m["Session"], "")
+
 	o.Data = m["Data"]
+	o.ShareFlag = MessageFlag(util.AsUInt32(m["ShareFlag"], 0))
+
 	o.Timeout = time.Duration(util.AsInt64(m["Timeout"], 0))
+
+	o.Headers = util.AsMap(m["Headers"], false)
+	o.Options = util.AsMap(m["Options"], false)
+
+	o.Replier = util.AsStr(m["Replier"], "")
 	o.ReplyId = util.AsUInt64(m["ReplyId"], 0)
 	o.ReplyCode = util.AsInt(m["ReplyCode"], 0)
 	o.ReplyData = m["ReplyData"]
 	o.ReplyErr = util.AsStr(m["ReplyErr"], "")
-	o.Headers = util.AsMap(m["Headers"], false)
-	o.Options = util.AsMap(m["Options"], false)
+	o.ReplyTrace = util.AsStr(m["ReplyTrace"], "")
+
 }
 
 func (o *Message) Clone() *Message {
 	var clone = &Message{
-
 		Type:    o.Type,
 		Address: o.Address,
 		Gatekey: o.Gatekey,
 		Sender:  o.Sender,
 
 		Data: o.Data,
+
+		ShareFlag: o.ShareFlag,
 
 		Headers: o.Headers,
 		Options: o.Options,
@@ -228,6 +253,7 @@ func (o *Message) Clone() *Message {
 		clone.ReplyErr = o.ReplyErr
 		clone.ReplyData = o.ReplyData
 		clone.ReplyErr = o.ReplyErr
+		clone.ReplyTrace = o.ReplyTrace
 	}
 
 	return clone
