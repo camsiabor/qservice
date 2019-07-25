@@ -32,7 +32,9 @@ type Message struct {
 	Type      MessageType
 	LocalFlag MessageFlag
 
-	Address  string
+	Address string
+	Gatekey string
+
 	Data     interface{}
 	Timeout  time.Duration
 	Canceled bool
@@ -76,7 +78,7 @@ func (o *Message) Reply(code int, data interface{}) error {
 	o.Type = MessageTypeReply
 	o.ReplyCode = code
 	o.ReplyData = data
-	_, err := o.microroller.Post(o)
+	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
 
@@ -88,7 +90,7 @@ func (o *Message) Error(code int, errmsg string) error {
 	o.Type = MessageTypeReply | MessageTypeFail
 	o.ReplyCode = code
 	o.ReplyErr = errmsg
-	_, err := o.microroller.Post(o)
+	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
 
@@ -157,16 +159,18 @@ func (o *Message) FromJson(data []byte) error {
 }
 
 func (o *Message) ToMap() map[string]interface{} {
-	var m = make(map[string]interface{})
-	m["Type"] = o.Type
-	m["Address"] = o.Address
-	m["Sender"] = o.Sender
-	m["Replier"] = o.Replier
-	m["Session"] = o.Session
-	m["Data"] = o.Data
-	m["Timeout"] = o.Timeout
-	m["ReplyId"] = o.ReplyId
-	m["ReplyCode"] = o.ReplyCode
+	var m = map[string]interface{}{
+		"Type":      o.Type,
+		"Address":   o.Address,
+		"Gatekey":   o.Address,
+		"Sender":    o.Sender,
+		"Replier":   o.Replier,
+		"Session":   o.Session,
+		"Data":      o.Data,
+		"Timeout":   o.Timeout,
+		"ReplyId":   o.ReplyId,
+		"ReplyCode": o.ReplyCode,
+	}
 	if o.ReplyData != nil {
 		m["ReplyData"] = o.ReplyData
 	}
@@ -185,6 +189,7 @@ func (o *Message) ToMap() map[string]interface{} {
 func (o *Message) FromMap(m map[string]interface{}) {
 	o.Type = MessageType(util.AsInt(m["Type"], 0))
 	o.Address = util.AsStr(m["Address"], "")
+	o.Gatekey = util.AsStr(m["Gatekey"], "")
 	o.Sender = util.AsStr(m["Sender"], "")
 	o.Replier = util.AsStr(m["Replier"], "")
 	o.Session = util.AsStr(m["Session"], "")
@@ -203,6 +208,7 @@ func (o *Message) Clone() *Message {
 
 		Type:    o.Type,
 		Address: o.Address,
+		Gatekey: o.Gatekey,
 		Sender:  o.Sender,
 
 		Data: o.Data,

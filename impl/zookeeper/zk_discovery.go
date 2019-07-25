@@ -178,13 +178,24 @@ func (o *ZooDiscovery) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 		}
 		return err
 	}
-	var path = o.GetNanoZNodeSelfPath(nano.Address)
-	var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll), false)
-	if !exist && o.Logger != nil {
-		if cerr == nil {
-			o.Logger.Println("nano register ", path)
-		} else {
-			o.Logger.Println("nano register fail ", path, " : ", cerr.Error())
+
+	if o.Gateways == nil {
+		return fmt.Errorf("no gateway is set")
+	}
+
+	o.GatewaysMutex.RLock()
+	o.GatewaysMutex.RUnlock()
+
+	var cerr error
+	for _, gateway := range o.Gateways {
+		var path = o.GetNanoZNodeSelfPath(nano.Address, gateway)
+		var exist, cerr = o.watcher.Create(path, []byte(""), zk.FlagEphemeral, zk.WorldACL(zk.PermAll), false)
+		if !exist && o.Logger != nil {
+			if cerr == nil {
+				o.Logger.Println("nano register ", path)
+			} else {
+				o.Logger.Println("nano register fail ", path, " : ", cerr.Error())
+			}
 		}
 	}
 	return cerr
@@ -435,6 +446,6 @@ func (o *ZooDiscovery) GetNanoZNodePath(address string) string {
 	return PathNano + "/" + address
 }
 
-func (o *ZooDiscovery) GetNanoZNodeSelfPath(address string) string {
-	return fmt.Sprintf("%s/%s/%s", PathNano, address, o.GetId())
+func (o *ZooDiscovery) GetNanoZNodeSelfPath(address string, gateway qtiny.Gateway) string {
+	return fmt.Sprintf("%s/%s/%s", PathNano, address, gateway.GetId())
 }

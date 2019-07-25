@@ -12,22 +12,34 @@ import (
 
 type OverseerErrorHandler func(event string, err interface{}, microroller *Microroller)
 
+type gatewayLinger struct {
+	name    string
+	gateway Gateway
+
+	queue   chan *Message
+	control chan string
+
+	serial uint64
+
+	requests []*Message
+}
+
 type Microroller struct {
 	serial uint64
 
 	mutex sync.RWMutex
 
-	gateway   Gateway
 	discovery Discovery
 
-	queue   chan *Message
-	control chan string
+	gatewaysMutex sync.RWMutex
 
-	requests      []*Message
-	requestsLimit uint64
+	gateways   map[string]*gatewayLinger
+	gatewaydef *gatewayLinger
 
 	nanoMutex sync.RWMutex
 	nanos     map[string]*Nano
+
+	requestsLimit uint64
 
 	logger *log.Logger
 
@@ -40,7 +52,6 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 	defer o.mutex.Unlock()
 
 	var requestsLimit = util.GetUInt64(config, 65536, "requests.limit")
-	o.requests = make([]*Message, requestsLimit)
 
 	if o.nanos == nil {
 		o.nanos = make(map[string]*Nano)
@@ -49,15 +60,24 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 	var err error
 
 	var pollLimit = util.GetInt(config, 8192, "poll.limit")
-	o.queue, err = o.gateway.Poll(pollLimit)
-	if err != nil {
-		return err
-	}
-	o.serial = 0
-	o.control = make(chan string, 8)
-	for i := 1; i <= runtime.NumCPU(); i++ {
-		go o.loop()
-	}
+
+	func() {
+		o.gatewaysMutex.Lock()
+		defer o.gatewaysMutex.Unlock()
+		for _, linger := range o.gateways {
+			linger.queue, err = linger.gateway.Poll(pollLimit)
+			if err != nil {
+				break
+			}
+			linger.serial = 0
+			linger.control = make(chan string, 8)
+			linger.requests = make([]*Message, requestsLimit)
+			for i := 1; i <= runtime.NumCPU(); i++ {
+				go o.dispatchLoop(linger)
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -65,25 +85,29 @@ func (o *Microroller) Stop() error {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	if o.control != nil {
-		close(o.control)
-		o.control = nil
+	o.gatewaysMutex.Lock()
+	defer o.gatewaysMutex.Unlock()
+
+	for _, linger := range o.gateways {
+		if linger.control != nil {
+			close(linger.control)
+		}
 	}
+
 	return nil
 }
 
-func (o *Microroller) loop() {
+func (o *Microroller) dispatchLoop(linger *gatewayLinger) {
 	var ok bool
 	var msg *Message
-
 	for {
 		select {
-		case msg, ok = <-o.queue:
+		case msg, ok = <-linger.queue:
 			if !ok {
 				break
 			}
-			o.dispatch(msg)
-		case _, ok = <-o.control:
+			o.dispatchMessage(msg, linger)
+		case _, ok = <-linger.control:
 			if !ok {
 				break
 			}
@@ -91,7 +115,7 @@ func (o *Microroller) loop() {
 	}
 }
 
-func (o *Microroller) dispatch(msg *Message) {
+func (o *Microroller) dispatchMessage(msg *Message, linger *gatewayLinger) {
 	defer func() {
 		var err = recover()
 		if err != nil && o.ErrHandler != nil {
@@ -100,7 +124,7 @@ func (o *Microroller) dispatch(msg *Message) {
 	}()
 
 	if msg.Type&MessageTypeReply > 0 {
-		o.handleReply(msg)
+		o.handleReplyMessage(msg, linger)
 		return
 	}
 
@@ -111,17 +135,17 @@ func (o *Microroller) dispatch(msg *Message) {
 	}
 }
 
-func (o *Microroller) handleReply(response *Message) {
+func (o *Microroller) handleReplyMessage(response *Message, linger *gatewayLinger) {
 	if response.ReplyId < 0 {
 		return
 	}
-	var request = o.requests[response.ReplyId]
+	var request = linger.requests[response.ReplyId]
 
 	if request == nil || request.Canceled {
 		return
 	}
 
-	o.requests[response.ReplyId] = nil
+	linger.requests[response.ReplyId] = nil
 
 	request.Related = response
 	response.Related = request
@@ -212,13 +236,18 @@ func (o *Microroller) generateMessageId() uint64 {
 	return id
 }
 
-func (o *Microroller) Post(request *Message) (response *Message, err error) {
+func (o *Microroller) Post(gatekey string, request *Message) (response *Message, err error) {
+
+	var linger = o.getGatewayLinger(gatekey, true)
+	if linger == nil {
+		return nil, fmt.Errorf("no gateway found with key %v", gatekey)
+	}
 
 	if request.Timeout > 0 || request.Handler != nil {
 
 		request.ReplyId = o.generateMessageId()
 
-		o.requests[request.ReplyId] = request
+		linger.requests[request.ReplyId] = request
 
 		if request.Timeout > 0 {
 			request.Canceled = false
@@ -231,7 +260,7 @@ func (o *Microroller) Post(request *Message) (response *Message, err error) {
 		}
 	}
 
-	err = o.gateway.Post(request, o.discovery)
+	err = linger.gateway.Post(request, o.discovery)
 	if err != nil {
 		return nil, err
 	}
@@ -247,20 +276,54 @@ func (o *Microroller) Post(request *Message) (response *Message, err error) {
 	return request.Related, nil
 }
 
-func (o *Microroller) Multicast(message *Message) error {
-	return o.gateway.Multicast(message, o.discovery)
+func (o *Microroller) Multicast(gatekey string, message *Message) error {
+	var linger = o.getGatewayLinger(gatekey, true)
+	if linger == nil {
+		return fmt.Errorf("no gateway found with key %v", gatekey)
+	}
+	return linger.gateway.Broadcast(message, o.discovery)
 }
 
-func (o *Microroller) Broadcast(message *Message) error {
-	return o.gateway.Broadcast(message, o.discovery)
+func (o *Microroller) Broadcast(gatekey string, message *Message) error {
+	var linger = o.getGatewayLinger(gatekey, true)
+	if linger == nil {
+		return fmt.Errorf("no gateway found with key %v", gatekey)
+	}
+	return linger.gateway.Broadcast(message, o.discovery)
 }
 
-func (o *Microroller) GetGateway() Gateway {
-	return o.gateway
+func (o *Microroller) getGatewayLinger(gatekey string, usedef bool) *gatewayLinger {
+	if o.gateways == nil {
+		return nil
+	}
+	if len(gatekey) == 0 {
+		return o.gatewaydef
+	}
+	o.gatewaysMutex.RLock()
+	var linger = o.gateways[gatekey]
+	o.gatewaysMutex.Unlock()
+	if linger == nil && usedef {
+		return o.gatewaydef
+	}
+	return linger
 }
 
-func (o *Microroller) SetGateway(gateway Gateway) *Microroller {
-	o.gateway = gateway
+func (o *Microroller) SetGateways(gateways map[string]Gateway, defgateway string) *Microroller {
+
+	if len(defgateway) == 0 {
+		panic("no default gateway is set")
+	}
+
+	o.gateways = make(map[string]*gatewayLinger)
+
+	for key, gateway := range gateways {
+		var linger = &gatewayLinger{}
+		linger.gateway = gateway
+		if key == defgateway {
+			o.gatewaydef = linger
+		}
+	}
+
 	return o
 }
 

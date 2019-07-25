@@ -24,7 +24,7 @@ type TinyKind interface {
 	GetOptions() TinyOptions
 	GetConfig() map[string]interface{}
 	GetTina() *Tina
-	Post(request *Message) (response *Message, err error)
+	Post(gatekey string, request *Message) (response *Message, err error)
 	NanoLocalRegister(nano *Nano) error
 	NanoLocalUnregister(nano *Nano) error
 }
@@ -149,8 +149,8 @@ func (o *Tiny) GetConfig() map[string]interface{} {
 	return o.config
 }
 
-func (o *Tiny) Post(request *Message) (*Message, error) {
-	return o.tina.microroller.Post(request)
+func (o *Tiny) Post(gatekey string, request *Message) (*Message, error) {
+	return o.tina.microroller.Post(gatekey, request)
 }
 
 func (o *Tiny) NanoLocalRegister(nano *Nano) error {

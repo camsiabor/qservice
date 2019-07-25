@@ -22,7 +22,10 @@ type Tina struct {
 	tinyMutex sync.RWMutex
 	tinys     map[string]*Tiny
 
-	gateway     Gateway
+	gatewaysMutex sync.RWMutex
+	gateways      map[string]Gateway
+	gatewaydef    string
+
 	discovery   Discovery
 	microroller *Microroller
 
@@ -81,7 +84,7 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
 	o.logger.Printf("tina %v initiating", o.id)
 
-	if o.gateway == nil {
+	if o.gateways == nil {
 		panic("gateway is not set")
 	}
 
@@ -91,9 +94,16 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 
 	// discovery
 	o.discovery.SetId(o.id)
-	if err := o.discovery.GatewayPublish(o.gateway); err != nil {
-		return err
+
+	for _, gateway := range o.gateways {
+		if gateway.GetLogger() == nil {
+			gateway.SetLogger(o.logger)
+		}
+		if err := o.discovery.GatewayPublish(gateway); err != nil {
+			return err
+		}
 	}
+
 	if o.discovery.GetLogger() == nil {
 		o.discovery.SetLogger(o.logger)
 	}
@@ -103,16 +113,13 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 		return err
 	}
 
-	// gateway
-	o.gateway.SetId(o.id)
-	if o.gateway.GetLogger() == nil {
-		o.gateway.SetLogger(o.logger)
+	var gatewayConfig = util.GetMap(o.config, true, "gateway")
+	for _, gateway := range o.gateways {
+		if err := gateway.Start(gatewayConfig); err != nil {
+			return err
+		}
 	}
 
-	var gatewayConfig = util.GetMap(o.config, true, "gateway")
-	if err := o.gateway.Start(gatewayConfig); err != nil {
-		return err
-	}
 	// microroller
 	if o.microroller == nil {
 		o.microroller = &Microroller{}
@@ -120,7 +127,7 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 	if o.microroller.GetLogger() == nil {
 		o.microroller.SetLogger(o.logger)
 	}
-	o.microroller.SetGateway(o.gateway)
+	o.microroller.SetGateways(o.gateways, o.gatewaydef)
 	o.microroller.SetDiscovery(o.discovery)
 	var microrollerConfig = util.GetMap(o.config, true, "microroller")
 	return o.microroller.Start(microrollerConfig)
@@ -196,13 +203,21 @@ func (o *Tina) Undeploy(tinyId string) *Future {
 	return future
 }
 
-func (o *Tina) SetGateway(gateway Gateway) *Tina {
-	o.gateway = gateway
+func (o *Tina) SetGateways(gateways map[string]Gateway, gatewaydef string) *Tina {
+
+	if len(gatewaydef) == 0 {
+		panic("no default gateway is set")
+	}
+
+	o.gatewaysMutex.Lock()
+	defer o.gatewaysMutex.Unlock()
+	o.gateways = gateways
+	o.gatewaydef = gatewaydef
 	return o
 }
 
-func (o *Tina) GetGateway() Gateway {
-	return o.gateway
+func (o *Tina) GetGateways() map[string]Gateway {
+	return o.gateways
 }
 
 func (o *Tina) GetDiscovery() Discovery {

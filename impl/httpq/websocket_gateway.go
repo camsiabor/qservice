@@ -38,6 +38,7 @@ type wssession struct {
 	conn     *websocket.Conn
 	request  *http.Request
 	timeConn time.Time
+	mutex    sync.RWMutex
 }
 
 func (o *WebsocketGateway) Init(config map[string]interface{}) error {
@@ -62,8 +63,15 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 		// TODO connect event
 		go func() {
 			o.Logger.Printf("websocket gateway listening to %v", o.Port)
+			func() {
+				time.Sleep(time.Second)
+				if o.wsserver != nil {
+					o.EventChannelSend(qtiny.GatewayEventConnected, o.GetMeta())
+				}
+			}()
 			err = o.wsserver.ListenAndServe()
 			if err != nil {
+				o.EventChannelSend(qtiny.GatewayEventDisconnected, o.GetMeta())
 				o.wsserver = nil
 				o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.Port, err.Error())
 			}
@@ -142,6 +150,7 @@ func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http
 		request:  request,
 		timeConn: time.Now(),
 	}
+
 	session.id = fmt.Sprintf("%v:%v", request.RemoteAddr, time.Now().Nanosecond())
 
 	func() {
@@ -177,7 +186,11 @@ func (o *WebsocketGateway) handleRead(client *wssession) {
 				}
 			}()
 			var message = &qtiny.Message{}
-			message.FromJson(data)
+			err = message.FromJson(data)
+			if err != nil {
+				log.Printf("websocket %v parse message codec error %v", client.id, err.Error())
+				return
+			}
 			message.Session = client.id
 			message.SessionRelated = messageType
 			o.Queue <- message
@@ -186,20 +199,69 @@ func (o *WebsocketGateway) handleRead(client *wssession) {
 
 }
 
+func (o *WebsocketGateway) portalSessionGet(portalAddress string) *wssession {
+	o.wsportalsMutex.RLock()
+	var wsportal = o.wsportals[portalAddress]
+	o.wsportalsMutex.RUnlock()
+
+	if wsportal != nil {
+		return wsportal
+	}
+
+	wsportal = &wssession{}
+	wsportal.id = portalAddress
+	wsportal.timeConn = time.Now()
+	func() {
+		o.wsportalsMutex.Lock()
+		defer o.wsportalsMutex.Unlock()
+		wsportal = o.wsportals[portalAddress]
+		if wsportal == nil {
+			o.wsportals[portalAddress] = wsportal
+		}
+	}()
+	return wsportal
+}
+
+func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtiny.PortalKind, portalAddress string) error {
+	if wsportal.conn != nil {
+		return nil
+	}
+	var meta = portal.GetMeta()
+	if meta == nil || len(meta) == 0 {
+		return fmt.Errorf("portal %v is not ready, no meta is set ", portalAddress)
+	}
+
+	var endpoints = util.GetStringSlice(meta, "endpoints")
+	if endpoints == nil || len(endpoints) == 0 {
+		return fmt.Errorf("portal %v endpoints is not set", portalAddress)
+	}
+
+	var err error
+	wsportal.mutex.Lock()
+	defer wsportal.mutex.Unlock()
+
+	for _, endpoint := range endpoints {
+		wsportal.conn, _, err = websocket.DefaultDialer.Dial(endpoint, nil)
+		if err != nil && wsportal.conn != nil {
+			wsportal.conn.Close()
+			wsportal.conn = nil
+		}
+	}
+
+	return nil
+}
+
 func (o *WebsocketGateway) publish(
 	messageType qtiny.MessageType,
 	portalAddress string, portal qtiny.PortalKind,
 	remote *qtiny.Nano, message *qtiny.Message,
 	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error {
 
-	o.wsportalsMutex.RLock()
-	var wsportal = o.wsportals[portalAddress]
-	o.wsportalsMutex.RUnlock()
-
-	var err error
-	wsportal.conn, _, err = websocket.DefaultDialer.Dial("", nil)
-	if err != nil {
-
+	var wsportal = o.portalSessionGet(portalAddress)
+	if wsportal.conn == nil {
+		if err := o.portalSessionConnect(wsportal, portal, portalAddress); err != nil {
+			return err
+		}
 	}
 
 	if portal == nil || len(portal.GetType()) == 0 {
@@ -234,9 +296,8 @@ func (o *WebsocketGateway) GetMeta() map[string]interface{} {
 		o.Meta["type"] = o.GetType()
 		o.Meta["hostname"] = hostname
 	}
-	if o.Meta["endpoints"] == nil {
-		o.Meta["endpoints"] = o.Endpoints
-	}
+
+	o.Meta["endpoints"] = o.Endpoints
 
 	if o.Meta["port"] == nil && o.Port > 0 {
 		o.Meta["port"] = o.Port
