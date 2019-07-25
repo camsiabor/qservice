@@ -15,8 +15,10 @@ type PublishHandler func(messageType qtiny.MessageType,
 	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error
 
 type MemGateway struct {
-	id  string
-	tag string
+	Id     string
+	NodeId string
+
+	Tag string
 
 	Mutex sync.Mutex
 
@@ -30,6 +32,8 @@ type MemGateway struct {
 
 	Meta map[string]interface{}
 
+	Config map[string]interface{}
+
 	EventChannelsMutex sync.RWMutex
 	EventChannels      map[string]chan *qtiny.GatewayEventBox
 
@@ -38,13 +42,17 @@ type MemGateway struct {
 
 func (o *MemGateway) Start(config map[string]interface{}) error {
 
-	var configId = util.GetStr(config, "", "id")
-	if len(configId) > 0 {
-		o.id = configId
+	if config == nil {
+		config = o.Config
 	}
 
-	if len(o.id) == 0 {
-		o.id = uuid.NewV4().String()
+	var configId = util.GetStr(config, "", "id")
+	if len(configId) > 0 {
+		o.Id = configId
+	}
+
+	if len(o.Id) == 0 {
+		o.Id = uuid.NewV4().String()
 	}
 
 	if o.Looping {
@@ -132,7 +140,7 @@ func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
 	}
-	message.Sender = o.id
+	message.Sender = o.Id
 	var clone = message.Clone()
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		clone.LocalFlag = qtiny.MessageFlagLocalOnly
@@ -158,17 +166,17 @@ func (o *MemGateway) IsPortalValid(portal qtiny.PortalKind) bool {
 func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) error {
 
 	if o.Queue == nil {
-		return fmt.Errorf("gateway %v not started yet", o.id)
+		return fmt.Errorf("gateway %v not started yet", o.Id)
 	}
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
-		if message.Sender == o.id {
+		if message.Sender == o.Id {
 			message.LocalFlag = message.LocalFlag | qtiny.MessageFlagLocalOnly
 		}
 	}
 
-	message.Sender = o.id
+	message.Sender = o.Id
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.Post(message, discovery)
@@ -186,7 +194,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if o.Publisher == nil {
-		return fmt.Errorf("gateway %v publisher is not set", o.id)
+		return fmt.Errorf("gateway %v publisher is not set", o.Id)
 	}
 
 	var data, err = message.ToJson()
@@ -206,7 +214,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if remote == nil {
-		return fmt.Errorf("%v discovery return nil remote : %v", o.id, discovery)
+		return fmt.Errorf("%v discovery return nil remote : %v", o.Id, discovery)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -226,7 +234,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	var portalAddresses, pointer = remote.PortalPointer()
 	if portalAddresses == nil {
-		return fmt.Errorf("%v portal addresses is empty for %v", o.id, message.Address)
+		return fmt.Errorf("%v portal addresses is empty for %v", o.Id, message.Address)
 	}
 	var portalCount = len(portalAddresses)
 	for i := 0; i < portalCount; i++ {
@@ -248,15 +256,23 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 /* ============================================================================================= */
 
 func (o *MemGateway) GetId() string {
-	return o.id
+	return o.Id
 }
 
 func (o *MemGateway) SetId(id string) {
-	o.id = id
+	o.Id = id
+}
+
+func (o *MemGateway) GetNodeId() string {
+	return o.NodeId
+}
+
+func (o *MemGateway) SetNodeId(nodeId string) {
+	o.NodeId = nodeId
 }
 
 func (o *MemGateway) GetTag() string {
-	return o.tag
+	return o.Tag
 }
 
 func (o *MemGateway) GetLogger() *log.Logger {
@@ -331,4 +347,12 @@ func (o *MemGateway) EventChannelClose(channelId string) error {
 	delete(o.EventChannels, channelId)
 	close(ch)
 	return nil
+}
+
+func (o *MemGateway) GetConfig() map[string]interface{} {
+	return o.Config
+}
+
+func (o *MemGateway) SetConfig(config map[string]interface{}) {
+	o.Config = config
 }

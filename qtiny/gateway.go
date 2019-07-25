@@ -9,6 +9,7 @@ type GatewayEvent int
 const (
 	GatewayEventConnected    GatewayEvent = 1
 	GatewayEventDisconnected GatewayEvent = 2
+	GatewayEventConfigChange GatewayEvent = 3
 )
 
 type GatewayEventBox struct {
@@ -21,8 +22,14 @@ type Gateway interface {
 	GetId() string
 	SetId(string)
 
+	GetNodeId() string
+	SetNodeId(string)
+
 	GetType() string
 	GetMeta() map[string]interface{}
+
+	GetConfig() map[string]interface{}
+	SetConfig(map[string]interface{})
 
 	GetLogger() *log.Logger
 	SetLogger(logger *log.Logger)

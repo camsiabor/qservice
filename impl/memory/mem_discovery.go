@@ -174,31 +174,31 @@ func (o *MemDiscovery) NanoLocalAll() map[string]*qtiny.Nano {
 
 /* =============================== gateway ============================================================== */
 
-func (o *MemDiscovery) GatewayPublish(gateway qtiny.Gateway) error {
+func (o *MemDiscovery) GatewayPublish(gatekey string, gateway qtiny.Gateway) error {
 	o.GatewaysMutex.Lock()
 	defer o.GatewaysMutex.Unlock()
 	if o.Gateways == nil {
 		o.Gateways = make(map[string]qtiny.Gateway)
 	}
-	var current = o.Gateways[gateway.GetId()]
+	var current = o.Gateways[gatekey]
 	if current == nil {
-		o.Gateways[gateway.GetId()] = gateway
+		o.Gateways[gatekey] = gateway
 	}
 	return nil
 }
 
-func (o *MemDiscovery) GatewayUnpublish(gateway qtiny.Gateway) error {
+func (o *MemDiscovery) GatewayUnpublish(gatekey string) error {
 	o.GatewaysMutex.Lock()
 	defer o.GatewaysMutex.Unlock()
 	if o.Gateways == nil {
 		return nil
 	}
-	var current = o.Gateways[gateway.GetId()]
+	var current = o.Gateways[gatekey]
 	if current == nil {
 		return nil
 	}
-	_ = gateway.EventChannelClose(gateway.GetId())
-	delete(o.Gateways, gateway.GetId())
+	_ = current.EventChannelClose(gatekey)
+	delete(o.Gateways, gatekey)
 	return nil
 }
 
@@ -255,13 +255,24 @@ func (o *MemDiscovery) PortalRemove(address string) {
 	delete(o.Portals, address)
 }
 
+func (o *MemDiscovery) GatewayGet(gatekey string) qtiny.Gateway {
+	if o.Gateways == nil {
+		return nil
+	}
+
+	o.GatewaysMutex.RLock()
+	var gateway = o.Gateways[gatekey]
+	o.GatewaysMutex.Unlock()
+	return gateway
+}
+
 /* ============================================================================================= */
 
-func (o *MemDiscovery) GetId() string {
+func (o *MemDiscovery) GetNodeId() string {
 	return o.id
 }
 
-func (o *MemDiscovery) SetId(id string) {
+func (o *MemDiscovery) SetNodeId(id string) {
 	o.id = id
 }
 

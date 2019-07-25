@@ -102,7 +102,7 @@ func (o *ZooGateway) handleConnectionEvents(event *zk.Event, watcher *ZooWatcher
 			o.Logger.Printf("%v create queue root error %v", o.GetId(), err.Error())
 		}
 
-		o.pathNodeQueue = fmt.Sprintf("%v/%v", o.pathRootQueue, o.GetId())
+		o.pathNodeQueue = fmt.Sprintf("%v/%v.%v", o.pathRootQueue, o.GetNodeId(), o.GetId())
 		var data, _ = json.Marshal(o.GetMeta())
 		_, err = o.watcher.Create(o.pathNodeQueue, data, 0, zk.WorldACL(zk.PermAll), true)
 		if err != nil {

@@ -93,13 +93,15 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 	}
 
 	// discovery
-	o.discovery.SetId(o.id)
+	o.discovery.SetNodeId(o.id)
 
-	for _, gateway := range o.gateways {
+	for gatekey, gateway := range o.gateways {
+		gateway.SetId(gatekey)
+		gateway.SetNodeId(o.id)
 		if gateway.GetLogger() == nil {
 			gateway.SetLogger(o.logger)
 		}
-		if err := o.discovery.GatewayPublish(gateway); err != nil {
+		if err := o.discovery.GatewayPublish(gatekey, gateway); err != nil {
 			return err
 		}
 	}
@@ -113,8 +115,9 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 		return err
 	}
 
-	var gatewayConfig = util.GetMap(o.config, true, "gateway")
-	for _, gateway := range o.gateways {
+	for gatekey, gateway := range o.gateways {
+
+		var gatewayConfig = util.GetMap(o.config, true, "gateways", gatekey)
 		if err := gateway.Start(gatewayConfig); err != nil {
 			return err
 		}
@@ -209,8 +212,18 @@ func (o *Tina) SetGateways(gateways map[string]Gateway, gatewaydef string) *Tina
 		panic("no default gateway is set")
 	}
 
+	if gateways[gatewaydef] == nil {
+		panic("default gateway not found in arguments " + gatewaydef)
+	}
+
+	for gatekey, gateway := range o.gateways {
+		gateway.SetId(gatekey)
+		gateway.SetNodeId(o.id)
+	}
+
 	o.gatewaysMutex.Lock()
 	defer o.gatewaysMutex.Unlock()
+
 	o.gateways = gateways
 	o.gatewaydef = gatewaydef
 	return o

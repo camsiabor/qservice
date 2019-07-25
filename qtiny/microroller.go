@@ -25,8 +25,6 @@ type gatewayLinger struct {
 }
 
 type Microroller struct {
-	serial uint64
-
 	mutex sync.RWMutex
 
 	discovery Discovery
@@ -223,15 +221,15 @@ func (o *Microroller) NanoLocalUnregister(nano *Nano) error {
 	return o.discovery.NanoLocalUnregister(nano)
 }
 
-func (o *Microroller) generateMessageId() uint64 {
-	var id = atomic.AddUint64(&o.serial, 1)
+func (o *Microroller) generateMessageId(linger *gatewayLinger) uint64 {
+	var id = atomic.AddUint64(&linger.serial, 1)
 	if id >= o.requestsLimit {
 		o.mutex.Lock()
 		defer o.mutex.Unlock()
-		if atomic.LoadUint64(&o.serial) >= o.requestsLimit {
-			atomic.StoreUint64(&o.serial, 1)
+		if atomic.LoadUint64(&linger.serial) >= o.requestsLimit {
+			atomic.StoreUint64(&linger.serial, 1)
 		}
-		id = atomic.AddUint64(&o.serial, 1)
+		id = atomic.AddUint64(&linger.serial, 1)
 	}
 	return id
 }
@@ -245,7 +243,7 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 
 	if request.Timeout > 0 || request.Handler != nil {
 
-		request.ReplyId = o.generateMessageId()
+		request.ReplyId = o.generateMessageId(linger)
 
 		linger.requests[request.ReplyId] = request
 
@@ -301,7 +299,7 @@ func (o *Microroller) getGatewayLinger(gatekey string, usedef bool) *gatewayLing
 	}
 	o.gatewaysMutex.RLock()
 	var linger = o.gateways[gatekey]
-	o.gatewaysMutex.Unlock()
+	o.gatewaysMutex.RUnlock()
 	if linger == nil && usedef {
 		return o.gatewaydef
 	}
@@ -314,12 +312,20 @@ func (o *Microroller) SetGateways(gateways map[string]Gateway, defgateway string
 		panic("no default gateway is set")
 	}
 
+	if gateways[defgateway] == nil {
+		panic("default gateway not found in arguments " + defgateway)
+	}
+
 	o.gateways = make(map[string]*gatewayLinger)
 
-	for key, gateway := range gateways {
+	for gatekey, gateway := range gateways {
 		var linger = &gatewayLinger{}
 		linger.gateway = gateway
-		if key == defgateway {
+		if len(gateway.GetId()) == 0 {
+			gateway.SetId(gatekey)
+		}
+		o.gateways[gatekey] = linger
+		if gatekey == defgateway {
 			o.gatewaydef = linger
 		}
 	}

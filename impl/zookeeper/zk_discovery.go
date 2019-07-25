@@ -258,11 +258,11 @@ func (o *ZooDiscovery) nanoRemoteRegistryWatch(event *zk.Event, stat *zk.Stat, d
 
 /* ======================== gateway ========================== */
 
-func (o *ZooDiscovery) GatewayPublish(gateway qtiny.Gateway) error {
-	if err := o.MemDiscovery.GatewayPublish(gateway); err != nil {
+func (o *ZooDiscovery) GatewayPublish(gatekey string, gateway qtiny.Gateway) error {
+	if err := o.MemDiscovery.GatewayPublish(gatekey, gateway); err != nil {
 		return err
 	}
-	var ch, err = gateway.EventChannelGet(gateway.GetId())
+	var ch, err = gateway.EventChannelGet(gatekey)
 	if err == nil {
 		go o.gatewayEventLoop(gateway, ch)
 	}
@@ -286,7 +286,8 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qref.StackString(1))
 				}
 			}()
-			pathNodeConnection = fmt.Sprintf("%s/%s", PathConnection, gateway.GetId())
+
+			pathNodeConnection = fmt.Sprintf("%s/%s.%s", PathConnection, gateway.GetNodeId(), gateway.GetId())
 
 			if box.Event == qtiny.GatewayEventDisconnected {
 				connected = false
@@ -447,5 +448,5 @@ func (o *ZooDiscovery) GetNanoZNodePath(address string) string {
 }
 
 func (o *ZooDiscovery) GetNanoZNodeSelfPath(address string, gateway qtiny.Gateway) string {
-	return fmt.Sprintf("%s/%s/%s", PathNano, address, gateway.GetId())
+	return fmt.Sprintf("%s/%s/%s.%s", PathNano, address, gateway.GetNodeId(), gateway.GetId())
 }

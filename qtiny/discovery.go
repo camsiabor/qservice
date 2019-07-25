@@ -3,8 +3,8 @@ package qtiny
 import "log"
 
 type Discovery interface {
-	GetId() string
-	SetId(string)
+	GetNodeId() string
+	SetNodeId(string)
 
 	GetLogger() *log.Logger
 	SetLogger(logger *log.Logger)
@@ -20,8 +20,9 @@ type Discovery interface {
 	NanoLocalUnregister(nano *Nano) error
 	NanoLocalGet(address string) (*Nano, error)
 
-	GatewayPublish(gateway Gateway) error
-	GatewayUnpublish(gateway Gateway) error
+	GatewayGet(gatekey string) Gateway
+	GatewayPublish(gatekey string, gateway Gateway) error
+	GatewayUnpublish(gatekey string) error
 
 	PortalGet(address string) PortalKind
 }
