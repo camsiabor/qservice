@@ -160,7 +160,13 @@ func (o *MemGateway) Broadcast(message *qtiny.Message, discovery qtiny.Discovery
 }
 
 func (o *MemGateway) IsPortalValid(portal qtiny.PortalKind) bool {
-	return portal == nil && len(portal.GetType()) > 0
+	if portal == nil {
+		return false
+	}
+	if len(portal.GetType()) == 0 {
+		return false
+	}
+	return true
 }
 
 func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) error {
@@ -169,7 +175,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		return fmt.Errorf("gateway %v not started yet", o.Id)
 	}
 
-	if message.Gatekey != o.Id {
+	if len(message.Gatekey) > 0 && message.Gatekey != o.Id {
 		var sibling = discovery.GatewayGet(message.Gatekey)
 		if sibling != nil {
 			return sibling.Post(message, discovery)

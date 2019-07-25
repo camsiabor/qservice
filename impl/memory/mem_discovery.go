@@ -262,7 +262,7 @@ func (o *MemDiscovery) GatewayGet(gatekey string) qtiny.Gateway {
 
 	o.GatewaysMutex.RLock()
 	var gateway = o.Gateways[gatekey]
-	o.GatewaysMutex.Unlock()
+	o.GatewaysMutex.RUnlock()
 	return gateway
 }
 
