@@ -136,13 +136,16 @@ func (o *WebsocketGateway) Stop(config map[string]interface{}) error {
 
 func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 
-	if request.Proto != "ws" && request.Proto != "wss" {
-		return
-	}
+	// TODO authentication
 
 	var conn, err = o.wsupgrader.Upgrade(response, request, nil)
 	if err != nil {
-		o.Logger.Printf("update request to ws connection %v fail %v", request.RemoteAddr, err.Error())
+		err = qerr.StackErr(0, 1024, err, "update request to ws fail %v", request.RemoteAddr)
+		if err == nil {
+			return
+		}
+		_, _ = response.Write([]byte(err.Error()))
+		o.Logger.Printf(err.Error())
 		return
 	}
 
@@ -224,18 +227,18 @@ func (o *WebsocketGateway) portalSessionGet(portalAddress string) *wssession {
 	return wsportal
 }
 
-func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtiny.PortalKind, portalAddress string) error {
+func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtiny.PortalKind, portalAddress string, traceDepth int) error {
 	if wsportal.conn != nil {
 		return nil
 	}
 	var meta = portal.GetMeta()
 	if meta == nil || len(meta) == 0 {
-		return qerr.StackStringErr(0, 1024, "portal %v is not ready, no meta is set ", portalAddress)
+		return qerr.StackStringErr(0, traceDepth, "portal %v is not ready, no meta is set ", portalAddress)
 	}
 
 	var endpoints = util.GetStringSlice(meta, "endpoints")
 	if endpoints == nil || len(endpoints) == 0 {
-		return qerr.StackStringErr(0, 1024, "portal %v endpoints is not set", portalAddress)
+		return qerr.StackStringErr(0, traceDepth, "portal %v endpoints is not set", portalAddress)
 	}
 
 	var err error
@@ -253,7 +256,7 @@ func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtin
 		}
 	}
 
-	return qerr.StackErr(0, 1024, err, "")
+	return qerr.StackErr(0, traceDepth, err, "")
 }
 
 func (o *WebsocketGateway) publish(
@@ -264,19 +267,20 @@ func (o *WebsocketGateway) publish(
 
 	var wsportal = o.portalSessionGet(portalAddress)
 
+	var traceDepth = message.GetTraceDepth()
 	if wsportal.conn == nil {
 
 		if portal == nil || len(portal.GetType()) == 0 {
-			return qerr.StackStringErr(0, 1024, "invalid portal %v", portalAddress)
+			return qerr.StackStringErr(0, traceDepth, "invalid portal %v", portalAddress)
 		}
 
-		if err := o.portalSessionConnect(wsportal, portal, portalAddress); err != nil {
+		if err := o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth); err != nil {
 			return err
 		}
 	}
 
 	var err = wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
-	return qerr.StackErr(0, 1024, err, "")
+	return qerr.StackErr(0, traceDepth, err, "")
 }
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	return o.MemGateway.Publish(message, discovery)

@@ -246,6 +246,9 @@ func (o *Nano) PortalPointer() ([]string, int) {
 		return nil, 0
 	}
 	var n = len(array)
+	if n == 1 {
+		return o.portalArray, 0
+	}
 	var pointer = int(atomic.AddInt32(&o.portalPointer, 1))
 	if pointer >= n {
 		pointer = 0

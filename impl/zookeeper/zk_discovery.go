@@ -431,7 +431,7 @@ func (o *ZooDiscovery) portalWatch(event *zk.Event, stat *zk.Stat, data interfac
 	}
 
 	if meta != nil {
-		portal.Meta = meta
+		portal.SetMeta(meta)
 	}
 
 	o.Logger.Printf("portal %v meta change", portal.Address)

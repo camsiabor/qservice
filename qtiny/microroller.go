@@ -13,7 +13,7 @@ import (
 type OverseerErrorHandler func(event string, err interface{}, microroller *Microroller)
 
 type gatewayLinger struct {
-	name    string
+	gatekey string
 	gateway Gateway
 
 	queue   chan *Message
@@ -240,7 +240,7 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 	if linger == nil {
 		return nil, qerr.StackStringErr(0, 1024, "no gateway found with key %v", gatekey)
 	}
-	request.Gatekey = gatekey
+	request.Gatekey = linger.gatekey
 
 	if request.Timeout > 0 || request.Handler != nil {
 
@@ -317,6 +317,7 @@ func (o *Microroller) SetGateways(gateways map[string]Gateway, gatewaydef string
 
 	for gatekey, gateway := range gateways {
 		var linger = &gatewayLinger{}
+		linger.gatekey = gatekey
 		linger.gateway = gateway
 		if len(gateway.GetId()) == 0 {
 			gateway.SetId(gatekey)

@@ -1,6 +1,9 @@
 package qtiny
 
-import "hash/fnv"
+import (
+	"github.com/camsiabor/qcom/util"
+	"hash/fnv"
+)
 
 type PortalKind interface {
 	GetType() string
@@ -28,6 +31,14 @@ func (o *Portal) GetAddress() string {
 
 func (o *Portal) GetMeta() map[string]interface{} {
 	return o.Meta
+}
+
+func (o *Portal) SetMeta(meta map[string]interface{}) {
+	o.Meta = meta
+	if meta == nil {
+		return
+	}
+	o.Type = util.GetStr(o.Meta, "", "type")
 }
 
 func (o *Portal) GetTypeHash() uint32 {

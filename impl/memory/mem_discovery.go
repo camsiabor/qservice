@@ -35,6 +35,8 @@ type MemDiscovery struct {
 	// remote portal
 	PortalsMutex sync.RWMutex
 	Portals      map[string]*qtiny.Portal
+
+	LocalAsRemote bool
 }
 
 func (o *MemDiscovery) Start(config map[string]interface{}) error {
@@ -48,8 +50,16 @@ func (o *MemDiscovery) Start(config map[string]interface{}) error {
 		o.id = uuid.NewV4().String()
 	}
 
+	o.tag = uuid.NewV4().String()
+
+	o.LocalAsRemote = util.GetBool(config, false, "remote.as.local")
+
 	if o.Remotes == nil {
 		o.Remotes = make(map[string]*qtiny.Nano)
+	}
+
+	if o.Portals == nil {
+		o.Portals = make(map[string]*qtiny.Portal)
 	}
 
 	if o.Looping {
@@ -57,6 +67,20 @@ func (o *MemDiscovery) Start(config map[string]interface{}) error {
 	}
 
 	o.Looping = true
+
+	if o.LocalAsRemote {
+		func() {
+			o.GatewaysMutex.Lock()
+			defer o.GatewaysMutex.Unlock()
+			for gatekey, gateway := range o.Gateways {
+				var ch, err = gateway.EventChannelGet(gatekey)
+				if err == nil {
+					go o.gatewayEventLoop(gateway, ch)
+				}
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -74,6 +98,9 @@ func (o *MemDiscovery) NanoRemoteRegister(nano *qtiny.Nano) error {
 	var service = o.Remotes[nano.Address]
 	if service == nil {
 		service = qtiny.CloneNano(nano)
+		if o.LocalAsRemote {
+			service.PortalAdd(o.GetNodeId(), map[string]interface{}{})
+		}
 		o.Remotes[service.Address] = service
 	}
 	return nil
@@ -95,7 +122,8 @@ func (o *MemDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 	if o.Remotes == nil {
 		return nil, nil
 	}
-	return o.Remotes[address], nil
+	var remote = o.Remotes[address]
+	return remote, nil
 }
 
 func (o *MemDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
@@ -109,6 +137,12 @@ func (o *MemDiscovery) NanoLocalRegister(nano *qtiny.Nano) error {
 		service = qtiny.CloneNano(nano)
 		o.Locals[service.Address] = service
 	}
+
+	if o.LocalAsRemote {
+		nano.PortalAdd(o.GetNodeId(), map[string]interface{}{})
+		return o.NanoRemoteRegister(nano)
+	}
+
 	return nil
 }
 
@@ -119,6 +153,11 @@ func (o *MemDiscovery) NanoLocalUnregister(nano *qtiny.Nano) error {
 	o.LocalsMutex.Lock()
 	defer o.LocalsMutex.Unlock()
 	delete(o.Locals, nano.Address)
+
+	if o.LocalAsRemote {
+		return o.NanoRemoteUnregister(nano)
+	}
+
 	return nil
 }
 
@@ -200,6 +239,33 @@ func (o *MemDiscovery) GatewayUnpublish(gatekey string) error {
 	_ = current.EventChannelClose(gatekey)
 	delete(o.Gateways, gatekey)
 	return nil
+}
+
+func (o *MemDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.GatewayEventBox) {
+
+	defer func() {
+		o.PortalRemove(gateway.GetNodeId())
+	}()
+
+	for box := range ch {
+		func() {
+			defer func() {
+				var pan = recover()
+				if pan != nil && o.Logger != nil {
+					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qerr.StackString(1, 1024, ""))
+				}
+			}()
+
+			if box.Event == qtiny.GatewayEventDisconnected {
+				o.PortalRemove(gateway.GetNodeId())
+			}
+
+			if box.Event == qtiny.GatewayEventConnected {
+				var portal = o.PortalCreate(gateway.GetNodeId())
+				portal.SetMeta(gateway.GetMeta())
+			}
+		}()
+	}
 }
 
 /* ======================== portals ==================================== */

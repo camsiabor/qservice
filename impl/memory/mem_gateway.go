@@ -234,7 +234,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if remote == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v discovery return nil remote : %v", o.Id, discovery)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v discovery return nil remote", o.Id)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -264,7 +264,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	for i := 0; i < portalCount; i++ {
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
-		if portal.GetTypeHash() == o.GetTypeHash() {
+		if portal != nil && portal.GetTypeHash() == o.GetTypeHash() {
 			err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 			if err == nil {
 				published = true
