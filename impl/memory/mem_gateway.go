@@ -5,6 +5,7 @@ import (
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
+	"hash/fnv"
 	"log"
 	"sync"
 )
@@ -16,7 +17,13 @@ type PublishHandler func(messageType qtiny.MessageType,
 
 type MemGateway struct {
 	Id     string
-	NodeId string
+	IdHash uint32
+
+	NodeId     string
+	NodeIdHash uint32
+
+	Type     string
+	TypeHash uint32
 
 	Tag string
 
@@ -236,6 +243,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		for i := 0; i < portalCount; i++ {
 			var portalAddress = portalAddresses[i]
 			var portal = discovery.PortalGet(portalAddress)
+			if portal.GetTypeHash() != o.GetTypeHash() {
+				continue
+			}
 			_ = o.Publisher(qtiny.MessageTypeBroadcast, portalAddress, portal, remote, message, discovery, o, data)
 		}
 		return nil
@@ -249,12 +259,17 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	if portalAddresses == nil {
 		return fmt.Errorf("%v portal addresses is empty for %v", o.Id, message.Address)
 	}
+	var published = false
 	var portalCount = len(portalAddresses)
 	for i := 0; i < portalCount; i++ {
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
+		if portal.GetTypeHash() != o.GetTypeHash() {
+			continue
+		}
 		err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 		if err == nil {
+			published = true
 			break
 		}
 		pointer++
@@ -262,6 +277,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 			pointer = 0
 		}
 
+	}
+	if err == nil && !published {
+		err = fmt.Errorf("cannot find any possible portal for gateway type %v [%v.%v]", o.GetType(), o.GetNodeId(), o.GetId())
 	}
 	return err
 }
@@ -297,7 +315,22 @@ func (o *MemGateway) SetLogger(logger *log.Logger) {
 }
 
 func (o *MemGateway) GetType() string {
-	return "memory"
+	if len(o.Type) == 0 {
+		o.Type = "memory"
+	}
+	return o.Type
+}
+
+func (o *MemGateway) GetTypeHash() uint32 {
+	if o.TypeHash == 0 {
+		var hash = fnv.New32a()
+		var _, err = hash.Write([]byte(o.GetType()))
+		if err != nil {
+			panic(err)
+		}
+		o.TypeHash = hash.Sum32()
+	}
+	return o.TypeHash
 }
 
 func (o *MemGateway) GetMeta() map[string]interface{} {
@@ -368,4 +401,28 @@ func (o *MemGateway) GetConfig() map[string]interface{} {
 
 func (o *MemGateway) SetConfig(config map[string]interface{}) {
 	o.Config = config
+}
+
+func (o *MemGateway) GetIdHash() uint32 {
+	if o.IdHash == 0 && len(o.Id) > 0 {
+		var hash = fnv.New32a()
+		var _, err = hash.Write([]byte(o.Id))
+		if err != nil {
+			panic(err)
+		}
+		o.IdHash = hash.Sum32()
+	}
+	return o.IdHash
+}
+
+func (o *MemGateway) GetNodeIdHash() uint32 {
+	if o.NodeIdHash == 0 && len(o.NodeId) > 0 {
+		var hash = fnv.New32a()
+		var _, err = hash.Write([]byte(o.NodeId))
+		if err != nil {
+			panic(err)
+		}
+		o.NodeIdHash = hash.Sum32()
+	}
+	return o.NodeIdHash
 }

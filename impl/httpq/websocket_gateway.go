@@ -208,17 +208,18 @@ func (o *WebsocketGateway) portalSessionGet(portalAddress string) *wssession {
 		return wsportal
 	}
 
-	wsportal = &wssession{}
-	wsportal.id = portalAddress
-	wsportal.timeConn = time.Now()
 	func() {
 		o.wsportalsMutex.Lock()
 		defer o.wsportalsMutex.Unlock()
 		wsportal = o.wsportals[portalAddress]
 		if wsportal == nil {
+			wsportal = &wssession{}
+			wsportal.id = portalAddress
+			wsportal.timeConn = time.Now()
 			o.wsportals[portalAddress] = wsportal
 		}
 	}()
+
 	return wsportal
 }
 
@@ -246,9 +247,12 @@ func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtin
 			wsportal.conn.Close()
 			wsportal.conn = nil
 		}
+		if err == nil && wsportal.conn != nil {
+			return nil
+		}
 	}
 
-	return nil
+	return err
 }
 
 func (o *WebsocketGateway) publish(
@@ -287,7 +291,10 @@ func (o *WebsocketGateway) Broadcast(message *qtiny.Message, discovery qtiny.Dis
 }
 
 func (o *WebsocketGateway) GetType() string {
-	return "websocket"
+	if len(o.Type) == 0 {
+		o.Type = "websocket"
+	}
+	return o.Type
 }
 
 func (o *WebsocketGateway) GetMeta() map[string]interface{} {

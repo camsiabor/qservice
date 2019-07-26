@@ -21,11 +21,15 @@ type GatewayEventBox struct {
 type Gateway interface {
 	GetId() string
 	SetId(string)
+	GetIdHash() uint32
 
 	GetNodeId() string
 	SetNodeId(string)
+	GetNodeIdHash() uint32
 
 	GetType() string
+	GetTypeHash() uint32
+
 	GetMeta() map[string]interface{}
 
 	GetConfig() map[string]interface{}

@@ -196,7 +196,10 @@ func (o *ZooGateway) GetQueueZNodePath(nodeId string) string {
 }
 
 func (o *ZooGateway) GetType() string {
-	return "zookeeper"
+	if len(o.Type) == 0 {
+		o.Type = "zookeeper"
+	}
+	return o.Type
 }
 
 func (o *ZooGateway) GetMeta() map[string]interface{} {
