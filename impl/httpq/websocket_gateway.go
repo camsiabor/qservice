@@ -227,8 +227,8 @@ func (o *WebsocketGateway) portalSessionGet(portalAddress string) *wssession {
 	return wsportal
 }
 
-func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtiny.PortalKind, portalAddress string, traceDepth int) error {
-	if wsportal.conn != nil {
+func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtiny.PortalKind, portalAddress string, traceDepth int, force bool) error {
+	if !force && wsportal.conn != nil {
 		return nil
 	}
 	var meta = portal.GetMeta()
@@ -265,6 +265,13 @@ func (o *WebsocketGateway) publish(
 	remote *qtiny.Nano, message *qtiny.Message,
 	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error {
 
+	defer func() {
+		var pan = recover()
+		if pan != nil {
+			o.Logger.Println(qerr.StackString(1, 1024, ""))
+		}
+	}()
+
 	var wsportal = o.portalSessionGet(portalAddress)
 
 	var traceDepth = message.GetTraceDepth()
@@ -274,12 +281,16 @@ func (o *WebsocketGateway) publish(
 			return qerr.StackStringErr(0, traceDepth, "invalid portal %v", portalAddress)
 		}
 
-		if err := o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth); err != nil {
+		if err := o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true); err != nil {
 			return err
 		}
 	}
-
+	wsportal.mutex.Lock()
 	var err = wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
+	wsportal.mutex.Unlock()
+	if err != nil {
+		err = o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true)
+	}
 	return qerr.StackErr(0, traceDepth, err, "")
 }
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {

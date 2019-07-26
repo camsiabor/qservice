@@ -147,7 +147,7 @@ func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
 	}
-	message.Sender = o.Id
+	message.Sender = o.NodeId
 	var clone = message.Clone()
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		clone.LocalFlag = qtiny.MessageFlagLocalOnly

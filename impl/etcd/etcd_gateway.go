@@ -136,7 +136,7 @@ func (o *EtcdGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) er
 		message.Address = message.Sender
 	}
 
-	message.Sender = o.GetId()
+	message.Sender = o.GetNodeId()
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.MemGateway.Post(message, discovery)
