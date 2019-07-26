@@ -17,7 +17,7 @@ func (o *LuaTinyGuide) watcherStart() {
 	defer func() {
 		var pan = recover()
 		if pan != nil {
-			o.Logger.Println(qerr.StackString("", 2, 1024))
+			o.Logger.Println(qerr.StackString(2, 1024, ""))
 		}
 	}()
 

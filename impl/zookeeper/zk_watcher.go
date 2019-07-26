@@ -1,8 +1,8 @@
 package zookeeper
 
 import (
-	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/util"
 
@@ -72,7 +72,7 @@ func (o *ZooWatcher) Start(config map[string]interface{}) error {
 	}
 
 	if o.conn != nil {
-		return fmt.Errorf("already connected")
+		return qerr.StackStringErr(0, 1024, "already connected")
 	}
 
 	if o.reconnectTimer == nil {
@@ -99,7 +99,7 @@ func (o *ZooWatcher) Stop(map[string]interface{}) error {
 	defer o.mutex.Unlock()
 
 	if o.conn == nil {
-		return fmt.Errorf("not connected yet")
+		return qerr.StackStringErr(0, 1024, "not connected yet")
 	}
 
 	if o.conn != nil {
@@ -270,7 +270,7 @@ func (o *ZooWatcher) Delete(path string, removeself, recursive bool) error {
 	var children, stat, err = o.conn.Children(path)
 	if children != nil && len(children) > 0 {
 		if !recursive {
-			return fmt.Errorf("it has children : %v", path)
+			return qerr.StackStringErr(0, 1024, "it has children : %v", path)
 		}
 		var n = len(children)
 		for i := 0; i < n; i++ {

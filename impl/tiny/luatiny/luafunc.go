@@ -1,9 +1,9 @@
 package luatiny
 
 import (
-	"fmt"
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
@@ -83,7 +83,7 @@ func (o *luaunit) nanoLocalRegister(L *lua.State) int {
 
 	handlerRef, err := L.TableGetAndRef(-1, "Handler", func(L *lua.State, tableIndex int, key string) error {
 		if !L.IsFunction(-1) {
-			return fmt.Errorf("is not a function")
+			return qerr.StackStringErr(0, 1024, "is not a function")
 		}
 		return nil
 	})

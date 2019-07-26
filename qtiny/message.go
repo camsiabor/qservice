@@ -52,10 +52,10 @@ type Message struct {
 	Headers MessageHeaders
 	Options MessageOptions
 
-	ReplyId         uint64
-	ReplyErr        string
-	ReplyTrace      string
-	ReplyTraceDepth int
+	ReplyId    uint64
+	ReplyErr   string
+	ReplyTrace string
+	TraceDepth int
 
 	ReplyCode    int
 	ReplyData    interface{}
@@ -97,11 +97,11 @@ func (o *Message) Error(code int, errmsg string) error {
 	o.ReplyCode = code
 	o.ReplyErr = errmsg
 
-	if o.ReplyTraceDepth >= 0 {
-		if o.ReplyTraceDepth == 0 {
-			o.ReplyTraceDepth = 1024
+	if o.TraceDepth >= 0 {
+		if o.TraceDepth == 0 {
+			o.TraceDepth = 1024
 		}
-		o.ReplyTrace = qerr.StackString(errmsg, 1, o.ReplyTraceDepth)
+		o.ReplyTrace = qerr.StackString(1, o.TraceDepth, errmsg)
 	}
 
 	_, err := o.microroller.Post(o.Gatekey, o)
@@ -172,6 +172,15 @@ func (o *Message) FromJson(data []byte) error {
 	return nil
 }
 
+func (o *Message) GetTraceDepth() int {
+	if o.TraceDepth < 0 {
+		return 0
+	} else if o.TraceDepth == 0 {
+		return 3
+	}
+	return o.TraceDepth
+}
+
 func (o *Message) ToMap() map[string]interface{} {
 	var m = map[string]interface{}{
 		"Type":    o.Type,
@@ -188,7 +197,7 @@ func (o *Message) ToMap() map[string]interface{} {
 		"ReplyId":   o.ReplyId,
 		"ReplyCode": o.ReplyCode,
 
-		"ReplyTraceDepth": o.ReplyTraceDepth,
+		"TraceDepth": o.TraceDepth,
 	}
 	if o.ReplyData != nil {
 		m["ReplyData"] = o.ReplyData
@@ -234,7 +243,7 @@ func (o *Message) FromMap(m map[string]interface{}) {
 	o.ReplyData = m["ReplyData"]
 	o.ReplyErr = util.AsStr(m["ReplyErr"], "")
 	o.ReplyTrace = util.AsStr(m["ReplyTrace"], "")
-	o.ReplyTraceDepth = util.AsInt(m["ReplyTraceDepth"], 0)
+	o.TraceDepth = util.AsInt(m["TraceDepth"], 0)
 
 }
 
@@ -259,7 +268,7 @@ func (o *Message) Clone() *Message {
 		ReplyId: o.ReplyId,
 		Replier: o.Replier,
 
-		ReplyTraceDepth: o.ReplyTraceDepth,
+		TraceDepth: o.TraceDepth,
 	}
 
 	if clone.Type&MessageTypeReply > 0 {

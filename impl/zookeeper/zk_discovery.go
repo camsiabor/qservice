@@ -154,11 +154,11 @@ func (o *ZooDiscovery) NanoRemoteGet(address string) (*qtiny.Nano, error) {
 		var nanoZNodePath = o.GetNanoZNodePath(address)
 		var children, _, err = o.watcher.GetConn().Children(nanoZNodePath)
 		if err != nil {
-			return nil, fmt.Errorf("no consumer found : " + err.Error())
+			return nil, qerr.StackStringErr(0, 1024, "no consumer found : "+err.Error())
 		}
 		o.watcher.Watch(WatchTypeChildren, nanoZNodePath, nil, time.Hour, o.nanoRemoteRegistryWatch)
 		if children == nil || len(children) == 0 {
-			return nil, fmt.Errorf("no consumer found for " + address)
+			return nil, qerr.StackStringErr(0, 1024, "no consumer found for "+address)
 		}
 		for i := 0; i < len(children); i++ {
 			remote.PortalAdd(children[i], children[i])
@@ -180,7 +180,7 @@ func (o *ZooDiscovery) nanoLocalPublishRegistry(nano *qtiny.Nano) error {
 	}
 
 	if o.Gateways == nil {
-		return fmt.Errorf("no gateway is set")
+		return qerr.StackStringErr(0, 1024, "no gateway is set")
 	}
 
 	o.GatewaysMutex.RLock()
@@ -283,7 +283,7 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 			defer func() {
 				var pan = recover()
 				if pan != nil && o.Logger != nil {
-					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qerr.StackString("", 1, 1024))
+					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qerr.StackString(1, 1024, ""))
 				}
 			}()
 

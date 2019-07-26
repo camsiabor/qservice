@@ -1,7 +1,7 @@
 package fswatcher
 
 import (
-	"fmt"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/fsnotify/fsnotify"
 	"path/filepath"
@@ -33,7 +33,7 @@ type FsWatcher struct {
 func (o *FsWatcher) Add(watch *FsWatch) error {
 
 	if watch == nil {
-		return fmt.Errorf("invalid argument fs watch is null")
+		return qerr.StackStringErr(0, 1024, "invalid argument fs watch is null")
 	}
 
 	var err error
@@ -93,7 +93,7 @@ func (o *FsWatcher) Add(watch *FsWatch) error {
 func (o *FsWatcher) Remove(abspath string) error {
 
 	if o.watches == nil {
-		return fmt.Errorf("is not added : %v", abspath)
+		return qerr.StackStringErr(0, 1024, "is not added : %v", abspath)
 	}
 
 	var current *FsWatch
@@ -103,7 +103,7 @@ func (o *FsWatcher) Remove(abspath string) error {
 		current = o.watches[abspath]
 	}()
 	if current == nil {
-		return fmt.Errorf("is not watch : %v", abspath)
+		return qerr.StackStringErr(0, 1024, "is not watch : %v", abspath)
 	}
 
 	current.looping = false

@@ -1,7 +1,7 @@
 package qtiny
 
 import (
-	"fmt"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"sync"
@@ -155,7 +155,7 @@ func (o *Tiny) Post(gatekey string, request *Message) (*Message, error) {
 
 func (o *Tiny) NanoLocalRegister(nano *Nano) error {
 	if nano == nil {
-		return fmt.Errorf("nano is nil")
+		return qerr.StackStringErr(0, 1024, "nano is nil")
 	}
 
 	if o.tina == nil || o.tina.microroller == nil {

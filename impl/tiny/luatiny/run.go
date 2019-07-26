@@ -1,7 +1,6 @@
 package luatiny
 
 import (
-	"fmt"
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/qerr"
@@ -22,7 +21,7 @@ func InitLuaState(luaPath, luaCPath string) (L *lua.State, err error) {
 			var ok bool
 			err, ok = pan.(error)
 			if !ok {
-				err = fmt.Errorf("lua init state error %v", pan)
+				err = qerr.StackStringErr(0, 1024, "lua init state error %v", pan)
 			}
 		}
 	}()

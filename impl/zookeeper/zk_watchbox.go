@@ -1,9 +1,9 @@
 package zookeeper
 
 import (
-	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
 	"github.com/camsiabor/qcom/qchan"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"log"
 	"time"
@@ -108,7 +108,7 @@ func (o *WatchBox) loop() {
 		select {
 		case event, ok = <-o.ch:
 			if !ok {
-				err = fmt.Errorf("closed")
+				err = qerr.StackStringErr(0, 1024, "closed")
 			}
 		case _, ok = <-o.control:
 			if !ok {

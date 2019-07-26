@@ -2,6 +2,7 @@ package httpq
 
 import (
 	"fmt"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/qnet"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/memory"
@@ -229,12 +230,12 @@ func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtin
 	}
 	var meta = portal.GetMeta()
 	if meta == nil || len(meta) == 0 {
-		return fmt.Errorf("portal %v is not ready, no meta is set ", portalAddress)
+		return qerr.StackStringErr(0, 1024, "portal %v is not ready, no meta is set ", portalAddress)
 	}
 
 	var endpoints = util.GetStringSlice(meta, "endpoints")
 	if endpoints == nil || len(endpoints) == 0 {
-		return fmt.Errorf("portal %v endpoints is not set", portalAddress)
+		return qerr.StackStringErr(0, 1024, "portal %v endpoints is not set", portalAddress)
 	}
 
 	var err error
@@ -266,7 +267,7 @@ func (o *WebsocketGateway) publish(
 	if wsportal.conn == nil {
 
 		if portal == nil || len(portal.GetType()) == 0 {
-			return fmt.Errorf("invalid portal %v", portalAddress)
+			return qerr.StackStringErr(0, 1024, "invalid portal %v", portalAddress)
 		}
 
 		if err := o.portalSessionConnect(wsportal, portal, portalAddress); err != nil {

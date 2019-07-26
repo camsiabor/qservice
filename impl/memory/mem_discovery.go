@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"fmt"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
@@ -53,7 +53,7 @@ func (o *MemDiscovery) Start(config map[string]interface{}) error {
 	}
 
 	if o.Looping {
-		return fmt.Errorf("already running")
+		return qerr.StackStringErr(0, 1024, "already running")
 	}
 
 	o.Looping = true

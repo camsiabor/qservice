@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"fmt"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
@@ -63,7 +63,7 @@ func (o *MemGateway) Start(config map[string]interface{}) error {
 	}
 
 	if o.Looping {
-		return fmt.Errorf("already running")
+		return qerr.StackStringErr(0, 1024, "already running")
 	}
 
 	if o.EventChannels == nil {
@@ -142,7 +142,7 @@ func (o *MemGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	if o.Queue == nil {
-		return fmt.Errorf("gateway not started yet")
+		return qerr.StackStringErr(0, 1024, "gateway not started yet")
 	}
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
@@ -179,7 +179,7 @@ func (o *MemGateway) IsPortalValid(portal qtiny.PortalKind) bool {
 func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) error {
 
 	if o.Queue == nil {
-		return fmt.Errorf("gateway %v not started yet", o.Id)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "gateway %v not started yet", o.Id)
 	}
 
 	if len(message.Gatekey) > 0 && message.Gatekey != o.Id {
@@ -214,7 +214,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if o.Publisher == nil {
-		return fmt.Errorf("gateway %v publisher is not set", o.Id)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "gateway %v publisher is not set", o.Id)
 	}
 
 	var data, err = message.ToJson()
@@ -234,7 +234,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if remote == nil {
-		return fmt.Errorf("%v discovery return nil remote : %v", o.Id, discovery)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v discovery return nil remote : %v", o.Id, discovery)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -252,12 +252,12 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if message.Type&qtiny.MessageTypeMulticast > 0 {
-		return fmt.Errorf("multicast is not implement")
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "multicast is not implement")
 	}
 
 	var portalAddresses, pointer = remote.PortalPointer()
 	if portalAddresses == nil {
-		return fmt.Errorf("%v portal addresses is empty for %v", o.Id, message.Address)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v portal addresses is empty for %v", o.Id, message.Address)
 	}
 	var published = false
 	var portalCount = len(portalAddresses)
@@ -279,7 +279,8 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	}
 	if err == nil && !published {
-		err = fmt.Errorf("cannot find any possible portal for gateway type %v [%v.%v]", o.GetType(), o.GetNodeId(), o.GetId())
+		err = qerr.StackStringErr(0, message.GetTraceDepth(),
+			"cannot find any possible portal for gateway type %v [%v.%v]", o.GetType(), o.GetNodeId(), o.GetId())
 	}
 	return err
 }

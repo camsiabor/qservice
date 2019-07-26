@@ -3,6 +3,7 @@ package luatiny
 import (
 	"fmt"
 	"github.com/camsiabor/golua/lua"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"log"
@@ -63,7 +64,7 @@ func (o *luaunit) start(restart bool) (err error) {
 	}
 
 	if len(o.main) == 0 {
-		return fmt.Errorf(o.string(), "main is not set")
+		return qerr.StackStringErr(0, 1024, o.string(), "main is not set")
 	}
 
 	o.path, err = filepath.Abs(o.guide.LuaPath + "/" + o.main)
