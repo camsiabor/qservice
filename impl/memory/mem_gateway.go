@@ -191,12 +191,12 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
-		if message.Sender == o.Id {
+		if message.Sender == o.NodeId {
 			message.LocalFlag = message.LocalFlag | qtiny.MessageFlagLocalOnly
 		}
 	}
 
-	message.Sender = o.Id
+	message.Sender = o.NodeId
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		return o.Post(message, discovery)
@@ -214,7 +214,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if o.Publisher == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "gateway %v publisher is not set", o.Id)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "gateway %v.%v publisher is not set", o.NodeId, o.Id)
 	}
 
 	var data, err = message.ToJson()
@@ -234,7 +234,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if remote == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v discovery return nil remote", o.Id)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v.%v discovery return nil remote", o.NodeId, o.Id)
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
@@ -257,7 +257,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	var portalAddresses, pointer = remote.PortalPointer()
 	if portalAddresses == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v portal addresses is empty for %v", o.Id, message.Address)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v.%v portal addresses is empty for %v", o.NodeId, o.Id, message.Address)
 	}
 	var published = false
 	var portalCount = len(portalAddresses)

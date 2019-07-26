@@ -86,6 +86,7 @@ func (o *Message) Reply(code int, data interface{}) error {
 	o.Type = MessageTypeReply
 	o.ReplyCode = code
 	o.ReplyData = data
+	o.Timeout = 0
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
