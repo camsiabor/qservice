@@ -163,10 +163,11 @@ func (o *WebsocketGateway) ServeHTTP(response http.ResponseWriter, request *http
 		o.wssessions[session.id] = session
 	}()
 
-	go o.handleRead(session)
+	go o.recvLoop(session)
 }
 
-func (o *WebsocketGateway) handleRead(client *wssession) {
+func (o *WebsocketGateway) recvLoop(client *wssession) {
+
 	defer func() {
 		o.wssessionsMutex.Lock()
 		defer o.wssessionsMutex.Unlock()
@@ -200,7 +201,6 @@ func (o *WebsocketGateway) handleRead(client *wssession) {
 			o.Queue <- message
 		}()
 	}
-
 }
 
 func (o *WebsocketGateway) portalSessionGet(portalAddress string) *wssession {
