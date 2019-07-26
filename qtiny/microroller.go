@@ -1,7 +1,7 @@
 package qtiny
 
 import (
-	"fmt"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
 	"log"
@@ -163,15 +163,15 @@ func (o *Microroller) handleReplyMessage(response *Message, linger *gatewayLinge
 func (o *Microroller) NanoLocalRegister(nano *Nano) error {
 
 	if nano == nil {
-		return fmt.Errorf("nano is nil")
+		return qerr.StackStringErr(0, 1024, "nano is nil")
 	}
 
 	if len(nano.Address) == 0 {
-		return fmt.Errorf("nano address is not set")
+		return qerr.StackStringErr(0, 1024, "nano address is not set")
 	}
 
 	if nano.Handler == nil {
-		return fmt.Errorf("nano handler is not set")
+		return qerr.StackStringErr(0, 1024, "nano handler is not set")
 	}
 
 	if len(nano.Id) == 0 {
@@ -238,8 +238,9 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 
 	var linger = o.getGatewayLinger(gatekey, true)
 	if linger == nil {
-		return nil, fmt.Errorf("no gateway found with key %v", gatekey)
+		return nil, qerr.StackStringErr(0, 1024, "no gateway found with key %v", gatekey)
 	}
+	request.Gatekey = gatekey
 
 	if request.Timeout > 0 || request.Handler != nil {
 
@@ -268,7 +269,7 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 		var response, timeouted = request.WaitReply(request.Timeout)
 		if timeouted {
 			request.Canceled = true
-			return response, fmt.Errorf("wait for %v reply timeout %d", request.Address, request.Timeout/1000/1000)
+			return response, qerr.StackStringErr(0, 1024, "wait for %v reply timeout %d", request.Address, request.Timeout/1000/1000)
 		}
 	}
 	return request.Related, nil
@@ -277,7 +278,7 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 func (o *Microroller) Multicast(gatekey string, message *Message) error {
 	var linger = o.getGatewayLinger(gatekey, true)
 	if linger == nil {
-		return fmt.Errorf("no gateway found with key %v", gatekey)
+		return qerr.StackStringErr(0, 1024, "no gateway found with key %v", gatekey)
 	}
 	return linger.gateway.Broadcast(message, o.discovery)
 }
@@ -285,7 +286,7 @@ func (o *Microroller) Multicast(gatekey string, message *Message) error {
 func (o *Microroller) Broadcast(gatekey string, message *Message) error {
 	var linger = o.getGatewayLinger(gatekey, true)
 	if linger == nil {
-		return fmt.Errorf("no gateway found with key %v", gatekey)
+		return qerr.StackStringErr(0, 1024, "no gateway found with key %v", gatekey)
 	}
 	return linger.gateway.Broadcast(message, o.discovery)
 }

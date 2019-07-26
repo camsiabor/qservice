@@ -253,7 +253,7 @@ func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtin
 		}
 	}
 
-	return err
+	return qerr.StackErr(0, 1024, err, "")
 }
 
 func (o *WebsocketGateway) publish(
@@ -275,7 +275,8 @@ func (o *WebsocketGateway) publish(
 		}
 	}
 
-	return wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
+	var err = wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
+	return qerr.StackErr(0, 1024, err, "")
 }
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	return o.MemGateway.Publish(message, discovery)

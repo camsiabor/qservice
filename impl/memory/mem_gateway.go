@@ -264,13 +264,12 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	for i := 0; i < portalCount; i++ {
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
-		if portal.GetTypeHash() != o.GetTypeHash() {
-			continue
-		}
-		err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
-		if err == nil {
-			published = true
-			break
+		if portal.GetTypeHash() == o.GetTypeHash() {
+			err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
+			if err == nil {
+				published = true
+				break
+			}
 		}
 		pointer++
 		if pointer >= portalCount {

@@ -68,6 +68,8 @@ type Message struct {
 	Related *Message
 }
 
+var MessageTraceDepthDefault = 3
+
 func NewMessage(address string, data interface{}, timeout time.Duration) (message *Message) {
 
 	message = &Message{}
@@ -176,7 +178,7 @@ func (o *Message) GetTraceDepth() int {
 	if o.TraceDepth < 0 {
 		return 0
 	} else if o.TraceDepth == 0 {
-		return 3
+		return MessageTraceDepthDefault
 	}
 	return o.TraceDepth
 }
