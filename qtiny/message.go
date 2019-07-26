@@ -3,7 +3,7 @@ package qtiny
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/camsiabor/qcom/qref"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"time"
 )
@@ -52,9 +52,11 @@ type Message struct {
 	Headers MessageHeaders
 	Options MessageOptions
 
-	ReplyId      uint64
-	ReplyErr     string
-	ReplyTrace   string
+	ReplyId         uint64
+	ReplyErr        string
+	ReplyTrace      string
+	ReplyTraceDepth int
+
 	ReplyCode    int
 	ReplyData    interface{}
 	ReplyChannel chan *Message
@@ -94,8 +96,14 @@ func (o *Message) Error(code int, errmsg string) error {
 	o.Type = MessageTypeReply | MessageTypeFail
 	o.ReplyCode = code
 	o.ReplyErr = errmsg
-	// TODO refactor
-	o.ReplyTrace = qref.StackString(1)
+
+	if o.ReplyTraceDepth >= 0 {
+		if o.ReplyTraceDepth == 0 {
+			o.ReplyTraceDepth = 1024
+		}
+		o.ReplyTrace = qerr.StackString(errmsg, 1, o.ReplyTraceDepth)
+	}
+
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
@@ -179,6 +187,8 @@ func (o *Message) ToMap() map[string]interface{} {
 		"Timeout":   o.Timeout,
 		"ReplyId":   o.ReplyId,
 		"ReplyCode": o.ReplyCode,
+
+		"ReplyTraceDepth": o.ReplyTraceDepth,
 	}
 	if o.ReplyData != nil {
 		m["ReplyData"] = o.ReplyData
@@ -224,10 +234,12 @@ func (o *Message) FromMap(m map[string]interface{}) {
 	o.ReplyData = m["ReplyData"]
 	o.ReplyErr = util.AsStr(m["ReplyErr"], "")
 	o.ReplyTrace = util.AsStr(m["ReplyTrace"], "")
+	o.ReplyTraceDepth = util.AsInt(m["ReplyTraceDepth"], 0)
 
 }
 
 func (o *Message) Clone() *Message {
+
 	var clone = &Message{
 		Type:    o.Type,
 		Address: o.Address,
@@ -246,6 +258,8 @@ func (o *Message) Clone() *Message {
 
 		ReplyId: o.ReplyId,
 		Replier: o.Replier,
+
+		ReplyTraceDepth: o.ReplyTraceDepth,
 	}
 
 	if clone.Type&MessageTypeReply > 0 {

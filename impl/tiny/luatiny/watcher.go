@@ -2,8 +2,8 @@ package luatiny
 
 import (
 	"encoding/json"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/qio"
-	"github.com/camsiabor/qcom/qref"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/impl/util/fswatcher"
 	"github.com/fsnotify/fsnotify"
@@ -17,7 +17,7 @@ func (o *LuaTinyGuide) watcherStart() {
 	defer func() {
 		var pan = recover()
 		if pan != nil {
-			o.Logger.Println(qref.StackString(2))
+			o.Logger.Println(qerr.StackString("", 2, 1024))
 		}
 	}()
 

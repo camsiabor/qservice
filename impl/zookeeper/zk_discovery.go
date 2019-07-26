@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/camsiabor/go-zookeeper/zk"
-	"github.com/camsiabor/qcom/qref"
+	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/qroutine"
 	"github.com/camsiabor/qcom/qstr"
 	"github.com/camsiabor/qcom/util"
@@ -283,7 +283,7 @@ func (o *ZooDiscovery) gatewayEventLoop(gateway qtiny.Gateway, ch <-chan *qtiny.
 			defer func() {
 				var pan = recover()
 				if pan != nil && o.Logger != nil {
-					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qref.StackString(1))
+					o.Logger.Printf("gateway publish loop error %v \n %v", util.AsError(pan).Error(), qerr.StackString("", 1, 1024))
 				}
 			}()
 

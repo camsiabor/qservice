@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
-	"github.com/camsiabor/qcom/qref"
+	"github.com/camsiabor/qcom/qerr"
 
 	"github.com/camsiabor/qcom/util"
 
@@ -52,7 +52,7 @@ func DefaultErrHandler(L *lua.State, pan interface{}) {
 	var ok bool
 	L.Notice, ok = pan.(*lua.Interrupt)
 	if !ok {
-		var stackinfo = qref.StackInfo(5)
+		var stackinfo = qerr.StackCuttingMap(5, 32)
 		var stackstr = util.AsStr(stackinfo["stack"], "")
 		stackstr = strings.Replace(stackstr, "\t", "  ", -1)
 		stackinfo["stack"] = strings.Split(stackstr, "\n")
@@ -81,11 +81,11 @@ func RunLuaFile(L *lua.State, filename string, errhandler lua.LuaGoErrHandler) (
 
 	err = L.CallHandle(0, lua.LUA_MULTRET, errhandler)
 	var topAfter = L.GetTop()
-	var return_num = topAfter - topBefore
+	var returnNum = topAfter - topBefore
 	if err == nil {
-		if return_num > 0 {
-			rets = make([]interface{}, return_num)
-			for i := 0; i < return_num; i++ {
+		if returnNum > 0 {
+			rets = make([]interface{}, returnNum)
+			for i := 0; i < returnNum; i++ {
 				rets[i], err = luar.GetVal(L, i+1)
 				if err != nil {
 					break
@@ -95,7 +95,7 @@ func RunLuaFile(L *lua.State, filename string, errhandler lua.LuaGoErrHandler) (
 	}
 	topAfter = L.GetTop()
 	if topAfter-topBefore > 0 {
-		for i := 0; i < return_num; i++ {
+		for i := 0; i < returnNum; i++ {
 			L.Pop(-1)
 		}
 	}
