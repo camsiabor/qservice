@@ -115,7 +115,7 @@ func (o *MemGateway) DispatchLoop() {
 		}
 		if msg != nil {
 			if o.Verbose > 0 {
-				o.Logger.Printf("gateway %v.%v dispatching %v", o.NodeId, o.Id, msg.String())
+				o.Logger.Printf("[gateway] [%v.%v] dispatching %v", o.NodeId, o.Id, msg.String())
 			}
 			var n = len(o.Listeners)
 			for i := 0; i < n; i++ {
@@ -149,7 +149,7 @@ func (o *MemGateway) Poll(limit int) (chan *qtiny.Message, error) {
 
 func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	if o.Queue == nil {
-		return qerr.StackStringErr(0, 1024, "gateway not started yet")
+		return qerr.StackStringErr(0, 1024, "[gateway] not started yet")
 	}
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		message.Address = message.Sender
@@ -186,7 +186,7 @@ func (o *MemGateway) IsPortalValid(portal qtiny.PortalKind) bool {
 func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) error {
 
 	if o.Queue == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "gateway %v not started yet", o.Id)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "[gateway] [%v.%v] not started yet", o.NodeId, o.Id)
 	}
 
 	if len(message.Gatekey) > 0 && message.Gatekey != o.Id {
@@ -207,7 +207,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		if o.Verbose > 0 {
-			o.Logger.Printf("gateway %v.%v to local by flag | %v", o.NodeId, o.Id, message.String())
+			o.Logger.Printf("[gateway] [%v.%v] to local by flag | %v", o.NodeId, o.Id, message.String())
 		}
 		return o.Post(message, discovery)
 	}
@@ -220,14 +220,14 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		if local != nil {
 			message.LocalFlag = message.LocalFlag & qtiny.MessageFlagLocalOnly
 			if o.Verbose > 0 {
-				o.Logger.Printf("gateway %v.%v to local by same node | %v", o.NodeId, o.Id, message.String())
+				o.Logger.Printf("[gateway] [%v.%v] to local by same node | %v", o.NodeId, o.Id, message.String())
 			}
 			return o.Post(message, discovery)
 		}
 	}
 
 	if o.Publisher == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "gateway %v.%v publisher is not set", o.NodeId, o.Id)
+		return qerr.StackStringErr(0, message.GetTraceDepth(), "[gateway] [%v.%v] publisher is not set", o.NodeId, o.Id)
 	}
 
 	var data, err = message.ToJson()
@@ -238,7 +238,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		var portal = discovery.PortalGet(message.Address)
 		if o.Verbose > 0 {
-			o.Logger.Printf("gateway %v.%v to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+			o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
 		}
 		return o.Publisher(qtiny.MessageTypeReply, message.Address, portal, nil, message, discovery, o, data)
 	}
@@ -263,7 +263,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 				continue
 			}
 			if o.Verbose > 0 {
-				o.Logger.Printf("gateway %v.%v to portal %v (%v) as broadcast %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+				o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as broadcast %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
 			}
 			_ = o.Publisher(qtiny.MessageTypeBroadcast, portalAddress, portal, remote, message, discovery, o, data)
 		}
@@ -285,7 +285,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		var portal = discovery.PortalGet(portalAddress)
 		if portal != nil && portal.GetTypeHash() == o.GetTypeHash() {
 			if o.Verbose > 0 {
-				o.Logger.Printf("gateway %v.%v to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+				o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
 			}
 			err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 			if err == nil {

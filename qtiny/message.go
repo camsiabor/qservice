@@ -297,12 +297,6 @@ func (o *Message) ToJsonString() (string, error) {
 
 func (o *Message) String() string {
 	var extra string
-	if o.Data != nil {
-		extra = string(o.Data)
-	}
-	if o.ReplyData != nil {
-		extra = string(o.ReplyData)
-	}
 
 	if len(o.ReplyErr) > 0 {
 		extra = o.ReplyErr
@@ -310,7 +304,7 @@ func (o *Message) String() string {
 			extra = extra + "\n" + o.ReplyTrace
 		}
 	}
-	return fmt.Sprintf("[%v] [%v] [%v] service [%v] sender [%v.%v] %v (%v)", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, extra, o.Canceled)
+	return fmt.Sprintf("[%v] [%v] [%v] service [%v] sender [%v.%v] %v", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, extra)
 }
 
 func (o *Message) TypeString() string {

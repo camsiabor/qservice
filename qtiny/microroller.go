@@ -53,7 +53,7 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 
 	o.Verbose = util.GetInt(config, 0, "verbose")
 
-	var requestsLimit = util.GetUInt64(config, 65536, "requests.limit")
+	var requestsLimit = util.GetUInt64(config, 1024*128, "requests.limit")
 
 	if o.nanos == nil {
 		o.nanos = make(map[string]*Nano)
@@ -61,7 +61,7 @@ func (o *Microroller) Start(config map[string]interface{}) error {
 
 	var err error
 
-	var pollLimit = util.GetInt(config, 8192, "poll.limit")
+	var pollLimit = util.GetInt(config, 1024*8, "poll.limit")
 
 	func() {
 		o.gatewaysMutex.Lock()
@@ -239,7 +239,7 @@ func (o *Microroller) NanoLocalUnregister(nano *Nano) error {
 
 func (o *Microroller) generateMessageId(linger *gatewayLinger) uint64 {
 	var id = atomic.AddUint64(&linger.serial, 1)
-	if id >= o.requestsLimit {
+	if id >= uint64(len(linger.requests)) {
 		o.mutex.Lock()
 		defer o.mutex.Unlock()
 		if atomic.LoadUint64(&linger.serial) >= o.requestsLimit {
