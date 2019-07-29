@@ -253,7 +253,7 @@ func (o *Microroller) generateMessageId(linger *gatewayLinger) uint64 {
 func (o *Microroller) Post(gatekey string, request *Message) (response *Message, err error) {
 
 	if o.Verbose > 0 {
-		o.logger.Printf("[microroller] posting %v", request.String())
+		o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] posting %v", request.String()))
 	}
 	var linger = o.getGatewayLinger(gatekey, true)
 	if linger == nil {
@@ -289,13 +289,13 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 		if timeouted {
 			request.Canceled = true
 			if o.Verbose > 0 {
-				o.logger.Printf("[microroller] response timeout %v", request.String())
+				o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] response timeout %v", request.String()))
 			}
 			return response, qerr.StackStringErr(0, 1024, "wait for %v reply timeout %d", request.Address, request.Timeout/1000/1000)
 		}
 		if o.Verbose > 0 {
-			o.logger.Printf("[microroller] response receveid [request] %v", request.String())
-			o.logger.Printf("[microroller] response receveid [respons] %v", response.String())
+			o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] response receveid [request] %v", request.String()))
+			o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] response receveid [respons] %v", response.String()))
 		}
 	}
 	return request.Related, nil
