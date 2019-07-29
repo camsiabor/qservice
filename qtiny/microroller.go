@@ -42,12 +42,16 @@ type Microroller struct {
 	logger *log.Logger
 
 	ErrHandler OverseerErrorHandler
+
+	Verbose int
 }
 
 func (o *Microroller) Start(config map[string]interface{}) error {
 
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
+
+	o.Verbose = util.GetInt(config, 0, "verbose")
 
 	var requestsLimit = util.GetUInt64(config, 65536, "requests.limit")
 
@@ -115,19 +119,31 @@ func (o *Microroller) dispatchLoop(linger *gatewayLinger) {
 
 func (o *Microroller) dispatchMessage(msg *Message, linger *gatewayLinger) {
 	defer func() {
-		var err = recover()
-		if err != nil && o.ErrHandler != nil {
-			o.ErrHandler("dispatch", err, o)
+		var pan = recover()
+		if pan == nil {
+			return
+		}
+		if o.Verbose > 0 {
+			o.logger.Printf("[microroller] handle error %v | %v", util.AsError(pan), msg.String())
+		}
+		if o.ErrHandler != nil {
+			o.ErrHandler("dispatch", pan, o)
 		}
 	}()
 
 	if msg.Type&MessageTypeReply > 0 {
+		if o.Verbose > 0 {
+			o.logger.Printf("[microroller] handle reply %v", msg.String())
+		}
 		o.handleReplyMessage(msg, linger)
 		return
 	}
 
 	var nano = o.nanos[msg.Address]
 	if nano != nil {
+		if o.Verbose > 0 {
+			o.logger.Printf("[microroller] dispatch %v", msg.String())
+		}
 		msg.microroller = o
 		nano.Handle(msg)
 	}
@@ -236,6 +252,9 @@ func (o *Microroller) generateMessageId(linger *gatewayLinger) uint64 {
 
 func (o *Microroller) Post(gatekey string, request *Message) (response *Message, err error) {
 
+	if o.Verbose > 0 {
+		o.logger.Printf("[microroller] posting %v", request.String())
+	}
 	var linger = o.getGatewayLinger(gatekey, true)
 	if linger == nil {
 		return nil, qerr.StackStringErr(0, 1024, "no gateway found with key %v", gatekey)
@@ -269,7 +288,14 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 		var response, timeouted = request.WaitReply(request.Timeout)
 		if timeouted {
 			request.Canceled = true
+			if o.Verbose > 0 {
+				o.logger.Printf("[microroller] response timeout %v", request.String())
+			}
 			return response, qerr.StackStringErr(0, 1024, "wait for %v reply timeout %d", request.Address, request.Timeout/1000/1000)
+		}
+		if o.Verbose > 0 {
+			o.logger.Printf("[microroller] response receveid [request] %v", request.String())
+			o.logger.Printf("[microroller] response receveid [respons] %v", response.String())
 		}
 	}
 	return request.Related, nil

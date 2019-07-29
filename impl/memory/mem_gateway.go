@@ -45,6 +45,8 @@ type MemGateway struct {
 	EventChannels      map[string]chan *qtiny.GatewayEventBox
 
 	Publisher PublishHandler
+
+	Verbose int
 }
 
 func (o *MemGateway) Start(config map[string]interface{}) error {
@@ -52,6 +54,8 @@ func (o *MemGateway) Start(config map[string]interface{}) error {
 	if config == nil {
 		config = o.Config
 	}
+
+	o.Verbose = util.GetInt(config, 0, "verbose")
 
 	var configId = util.GetStr(config, "", "id")
 	if len(configId) > 0 {
@@ -110,6 +114,9 @@ func (o *MemGateway) DispatchLoop() {
 			}
 		}
 		if msg != nil {
+			if o.Verbose > 0 {
+				o.Logger.Printf("gateway %v.%v dispatching %v", o.NodeId, o.Id, msg.String())
+			}
 			var n = len(o.Listeners)
 			for i := 0; i < n; i++ {
 				o.Listeners[i] <- msg
@@ -199,6 +206,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	message.Sender = o.NodeId
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
+		if o.Verbose > 0 {
+			o.Logger.Printf("gateway %v.%v to local by flag | %v", o.NodeId, o.Id, message.String())
+		}
 		return o.Post(message, discovery)
 	}
 
@@ -209,6 +219,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		}
 		if local != nil {
 			message.LocalFlag = message.LocalFlag & qtiny.MessageFlagLocalOnly
+			if o.Verbose > 0 {
+				o.Logger.Printf("gateway %v.%v to local by same node | %v", o.NodeId, o.Id, message.String())
+			}
 			return o.Post(message, discovery)
 		}
 	}
@@ -224,6 +237,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		var portal = discovery.PortalGet(message.Address)
+		if o.Verbose > 0 {
+			o.Logger.Printf("gateway %v.%v to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+		}
 		return o.Publisher(qtiny.MessageTypeReply, message.Address, portal, nil, message, discovery, o, data)
 	}
 
@@ -246,6 +262,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 			if portal.GetTypeHash() != o.GetTypeHash() {
 				continue
 			}
+			if o.Verbose > 0 {
+				o.Logger.Printf("gateway %v.%v to portal %v (%v) as broadcast %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+			}
 			_ = o.Publisher(qtiny.MessageTypeBroadcast, portalAddress, portal, remote, message, discovery, o, data)
 		}
 		return nil
@@ -265,6 +284,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
 		if portal != nil && portal.GetTypeHash() == o.GetTypeHash() {
+			if o.Verbose > 0 {
+				o.Logger.Printf("gateway %v.%v to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+			}
 			err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 			if err == nil {
 				published = true
@@ -279,7 +301,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 	if err == nil && !published {
 		err = qerr.StackStringErr(0, message.GetTraceDepth(),
-			"cannot find any possible portal for gateway type %v [%v.%v]", o.GetType(), o.GetNodeId(), o.GetId())
+			"cannot find any possible portal for gateway type %v [%v.%v]", o.GetType(), o.NodeId, o.Id)
 	}
 	return err
 }

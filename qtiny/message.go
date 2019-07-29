@@ -284,3 +284,46 @@ func (o *Message) Clone() *Message {
 
 	return clone
 }
+
+/* =========================== verbose =================================== */
+
+func (o *Message) ToJsonString() (string, error) {
+	var bytes, err = o.ToJson()
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), err
+}
+
+func (o *Message) String() string {
+	var extra string
+	if o.Data != nil {
+		extra = string(o.Data)
+	}
+	if o.ReplyData != nil {
+		extra = string(o.ReplyData)
+	}
+
+	if len(o.ReplyErr) > 0 {
+		extra = o.ReplyErr
+		if len(o.ReplyTrace) > 0 {
+			extra = extra + "\n" + o.ReplyTrace
+		}
+	}
+	return fmt.Sprintf("[%v] [%v] [%v] service [%v] sender [%v.%v] %v (%v)", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, extra, o.Canceled)
+}
+
+func (o *Message) TypeString() string {
+	switch o.Type {
+	case MessageTypeReply:
+		return "reply"
+	case MessageTypeMulticast:
+		return "multicast"
+	case MessageTypeBroadcast:
+		return "broadcast"
+	case MessageTypeFail:
+		return "fail"
+	default:
+		return "common"
+	}
+}

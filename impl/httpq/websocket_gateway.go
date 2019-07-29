@@ -196,6 +196,7 @@ func (o *WebsocketGateway) recvLoop(client *wssession) {
 				log.Printf("websocket %v parse message codec error %v", client.id, err.Error())
 				return
 			}
+
 			message.Session = client.id
 			message.SessionRelated = messageType
 			o.Queue <- message
@@ -246,12 +247,15 @@ func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtin
 	defer wsportal.mutex.Unlock()
 
 	for _, endpoint := range endpoints {
+
+		o.Logger.Printf("websocket connecting to portal %v", portalAddress)
 		wsportal.conn, _, err = websocket.DefaultDialer.Dial(endpoint, nil)
 		if err != nil && wsportal.conn != nil {
 			wsportal.conn.Close()
 			wsportal.conn = nil
 		}
 		if err == nil && wsportal.conn != nil {
+			o.Logger.Printf("websocket connected to portal %v", portalAddress)
 			return nil
 		}
 	}
@@ -280,7 +284,6 @@ func (o *WebsocketGateway) publish(
 		if portal == nil || len(portal.GetType()) == 0 {
 			return qerr.StackStringErr(0, traceDepth, "invalid portal %v", portalAddress)
 		}
-
 		if err := o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true); err != nil {
 			return err
 		}
