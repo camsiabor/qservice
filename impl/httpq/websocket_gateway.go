@@ -289,14 +289,12 @@ func (o *WebsocketGateway) publish(
 			if o.Verbose > 0 {
 				o.Logger.Printf("[websocket] %v", err.Error())
 			}
-			_ = message.Error(500, err.Error())
 			return err
 		}
 		if err = o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true); err != nil {
 			if o.Verbose > 0 {
 				o.Logger.Printf("[websocket] portal disconnected %v | %v", portalAddress, err.Error())
 			}
-			_ = message.Error(500, "connect to portal %v fail %v", portalAddress, err.Error())
 			return err
 		}
 	}
@@ -310,7 +308,6 @@ func (o *WebsocketGateway) publish(
 		if o.Verbose > 0 {
 			o.Logger.Printf("[websocket] portal disconnected %v | %v", portalAddress, err.Error())
 		}
-		_ = message.Error(500, "connect to portal %v fail %v", portalAddress, err.Error())
 	}
 	return err
 }

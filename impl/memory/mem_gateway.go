@@ -159,6 +159,9 @@ func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		clone.LocalFlag = qtiny.MessageFlagLocalOnly
 	}
+	if o.Verbose > 0 {
+		o.Logger.Printf("[gateway] [%v.%v] posting %v", o.NodeId, o.Id, clone.String())
+	}
 	o.Queue <- clone
 	return nil
 }

@@ -83,10 +83,14 @@ func (o *Message) Reply(code int, data interface{}) error {
 	if o.ReplyId == 0 {
 		return fmt.Errorf("no reply id")
 	}
+
 	o.Type = MessageTypeReply
+
 	o.ReplyCode = code
 	o.ReplyData = data
+
 	o.Timeout = 0
+
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
@@ -298,15 +302,7 @@ func (o *Message) ToJsonString() (string, error) {
 }
 
 func (o *Message) String() string {
-	var extra string
-
-	if len(o.ReplyErr) > 0 {
-		extra = o.ReplyErr
-		if len(o.ReplyTrace) > 0 {
-			extra = extra + "\n" + o.ReplyTrace
-		}
-	}
-	return fmt.Sprintf("| [%v] [%v] [%v] service [%v] sender [%v.%v] %v |", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, extra)
+	return fmt.Sprintf("| [%v] [%v] [%v] service [%v] sender [%v.%v] %v {%v} |", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, o.ReplyErr, o.Timeout)
 }
 
 func (o *Message) TypeString() string {
