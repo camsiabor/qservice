@@ -313,13 +313,18 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
 		if portal != nil && portal.GetTypeHash() == o.GetTypeHash() {
-			if o.Verbose > 0 {
-				o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
-			}
+
 			err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 			if err == nil {
 				published = true
+				if o.Verbose > 0 {
+					o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+				}
 				break
+			} else {
+				if o.Verbose > 0 {
+					o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) fail as request %v %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String(), err.Error())
+				}
 			}
 		}
 		pointer++
