@@ -183,16 +183,30 @@ func (o *MemGateway) IsPortalValid(portal qtiny.PortalKind) bool {
 	return true
 }
 
-func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) error {
+func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) (err error) {
 
 	if o.Queue == nil {
 		return qerr.StackStringErr(0, message.GetTraceDepth(), "[gateway] [%v.%v] not started yet", o.NodeId, o.Id)
 	}
 
+	defer func() {
+		var pan = recover()
+		if pan != nil {
+			err = util.AsError(pan)
+		}
+		if err == nil {
+			return
+		}
+		if message.ReplyId > 0 {
+			_ = message.Error(500, err.Error())
+		}
+	}()
+
 	if len(message.Gatekey) > 0 && message.Gatekey != o.Id {
 		var sibling = discovery.GatewayGet(message.Gatekey)
 		if sibling != nil {
-			return sibling.Post(message, discovery)
+			err = sibling.Post(message, discovery)
+			return err
 		}
 	}
 
@@ -213,7 +227,8 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if message.LocalFlag&qtiny.MessageFlagRemoteOnly == 0 {
-		var local, err = discovery.NanoLocalGet(message.Address)
+		var local *qtiny.Nano
+		local, err = discovery.NanoLocalGet(message.Address)
 		if err != nil {
 			return err
 		}
@@ -222,15 +237,18 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 			if o.Verbose > 0 {
 				o.Logger.Printf("[gateway] [%v.%v] to local by same node | %v", o.NodeId, o.Id, message.String())
 			}
-			return o.Post(message, discovery)
+			err = o.Post(message, discovery)
+			return err
 		}
 	}
 
 	if o.Publisher == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "[gateway] [%v.%v] publisher is not set", o.NodeId, o.Id)
+		err = qerr.StackStringErr(0, message.GetTraceDepth(), "[gateway] [%v.%v] publisher is not set", o.NodeId, o.Id)
+		return err
 	}
 
-	var data, err = message.ToJson()
+	var data []byte
+	data, err = message.ToJson()
 	if err != nil {
 		return err
 	}
@@ -238,19 +256,27 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	if message.Type&qtiny.MessageTypeReply > 0 {
 		var portal = discovery.PortalGet(message.Address)
 		if o.Verbose > 0 {
-			o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+			if portal == nil {
+				o.Logger.Printf("[gateway] [%v.%v] to portal nil (%v) as reply %v", o.NodeId, o.Id, message.Address, message.String())
+			} else {
+				o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetType(), portal.GetAddress(), message.String())
+			}
+
 		}
-		return o.Publisher(qtiny.MessageTypeReply, message.Address, portal, nil, message, discovery, o, data)
+		err = o.Publisher(qtiny.MessageTypeReply, message.Address, portal, nil, message, discovery, o, data)
+		return err
 	}
 
-	remote, err := discovery.NanoRemoteGet(message.Address)
+	var remote *qtiny.Nano
+	remote, err = discovery.NanoRemoteGet(message.Address)
 
 	if err != nil {
 		return err
 	}
 
 	if remote == nil {
-		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v.%v discovery return nil remote", o.NodeId, o.Id)
+		err = qerr.StackStringErr(0, message.GetTraceDepth(), "%v.%v discovery return nil remote", o.NodeId, o.Id)
+		return err
 	}
 
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {

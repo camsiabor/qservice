@@ -95,18 +95,20 @@ func (o *Message) IsError() bool {
 	return len(o.ReplyErr) > 0 || ((o.Type & MessageTypeFail) > 0)
 }
 
-func (o *Message) Error(code int, errmsg string) error {
-	o.Type = MessageTypeReply | MessageTypeFail
+func (o *Message) Error(code int, errmsg string, args ...interface{}) error {
+	o.Type = MessageTypeReply
 	o.ReplyCode = code
-	o.ReplyErr = errmsg
-
+	if args == nil {
+		o.ReplyErr = errmsg
+	} else {
+		o.ReplyErr = fmt.Sprintf(errmsg, args...)
+	}
 	if o.TraceDepth >= 0 {
 		if o.TraceDepth == 0 {
 			o.TraceDepth = 1024
 		}
 		o.ReplyTrace = qerr.StackString(1, o.TraceDepth, errmsg)
 	}
-
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
@@ -304,7 +306,7 @@ func (o *Message) String() string {
 			extra = extra + "\n" + o.ReplyTrace
 		}
 	}
-	return fmt.Sprintf("[%v] [%v] [%v] service [%v] sender [%v.%v] %v", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, extra)
+	return fmt.Sprintf("| [%v] [%v] [%v] service [%v] sender [%v.%v] %v |", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, extra)
 }
 
 func (o *Message) TypeString() string {

@@ -63,7 +63,7 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 
 		// TODO connect event
 		go func() {
-			o.Logger.Printf("websocket gateway listening to %v", o.Port)
+			o.Logger.Printf("[websocket] gateway listening to %v", o.Port)
 			func() {
 				time.Sleep(time.Second)
 				if o.wsserver != nil {
@@ -74,7 +74,7 @@ func (o *WebsocketGateway) Init(config map[string]interface{}) error {
 			if err != nil {
 				o.EventChannelSend(qtiny.GatewayEventDisconnected, o.GetMeta())
 				o.wsserver = nil
-				o.Logger.Printf("websocket gateway listen & serve %v error %v ", o.Port, err.Error())
+				o.Logger.Printf("[websocket] gateway listen & serve %v error %v ", o.Port, err.Error())
 			}
 		}()
 
@@ -114,7 +114,7 @@ func (o *WebsocketGateway) Stop(config map[string]interface{}) error {
 	if o.wsserver != nil {
 		_ = o.wsserver.Close()
 		o.wsserver = nil
-		o.Logger.Printf("websocket gateway close")
+		o.Logger.Printf("[websocket] gateway close")
 	}
 
 	if o.wsportals != nil {
@@ -180,7 +180,7 @@ func (o *WebsocketGateway) recvLoop(client *wssession) {
 	for {
 		messageType, data, err := client.conn.ReadMessage()
 		if err != nil {
-			log.Printf("websocket %v read message error %v", client.id, err.Error())
+			log.Printf("[websocket] %v read message error %v", client.id, err.Error())
 			break
 		}
 		func() {
@@ -193,7 +193,7 @@ func (o *WebsocketGateway) recvLoop(client *wssession) {
 			var message = &qtiny.Message{}
 			err = message.FromJson(data)
 			if err != nil {
-				log.Printf("websocket %v parse message codec error %v", client.id, err.Error())
+				log.Printf("[websocket] %v parse message codec error %v", client.id, err.Error())
 				return
 			}
 
@@ -248,14 +248,14 @@ func (o *WebsocketGateway) portalSessionConnect(wsportal *wssession, portal qtin
 
 	for _, endpoint := range endpoints {
 
-		o.Logger.Printf("websocket connecting to portal %v", portalAddress)
+		o.Logger.Printf("[websocket] connecting to portal %v", portalAddress)
 		wsportal.conn, _, err = websocket.DefaultDialer.Dial(endpoint, nil)
 		if err != nil && wsportal.conn != nil {
 			wsportal.conn.Close()
 			wsportal.conn = nil
 		}
 		if err == nil && wsportal.conn != nil {
-			o.Logger.Printf("websocket connected to portal %v", portalAddress)
+			o.Logger.Printf("[websocket] connected to portal %v", portalAddress)
 			return nil
 		}
 	}
@@ -267,7 +267,7 @@ func (o *WebsocketGateway) publish(
 	messageType qtiny.MessageType,
 	portalAddress string, portal qtiny.PortalKind,
 	remote *qtiny.Nano, message *qtiny.Message,
-	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) error {
+	discovery qtiny.Discovery, gateway qtiny.Gateway, data []byte) (err error) {
 
 	defer func() {
 		var pan = recover()
@@ -276,25 +276,43 @@ func (o *WebsocketGateway) publish(
 		}
 	}()
 
+	if o.Verbose > 0 {
+		o.Logger.Printf("[websocket] publishing %v", message.String())
+	}
+
 	var wsportal = o.portalSessionGet(portalAddress)
 
 	var traceDepth = message.GetTraceDepth()
 	if wsportal.conn == nil {
-
 		if portal == nil || len(portal.GetType()) == 0 {
-			return qerr.StackStringErr(0, traceDepth, "invalid portal %v", portalAddress)
+			err = fmt.Errorf("invalid portal %v", portalAddress)
+			if o.Verbose > 0 {
+				o.Logger.Printf("[websocket] %v", err.Error())
+			}
+			_ = message.Error(500, err.Error())
+			return err
 		}
-		if err := o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true); err != nil {
+		if err = o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true); err != nil {
+			if o.Verbose > 0 {
+				o.Logger.Printf("[websocket] portal disconnected %v | %v", portalAddress, err.Error())
+			}
+			_ = message.Error(500, "connect to portal %v fail %v", portalAddress, err.Error())
 			return err
 		}
 	}
 	wsportal.mutex.Lock()
-	var err = wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
+	err = wsportal.conn.WriteMessage(websocket.BinaryMessage, data)
 	wsportal.mutex.Unlock()
 	if err != nil {
 		err = o.portalSessionConnect(wsportal, portal, portalAddress, traceDepth, true)
 	}
-	return qerr.StackErr(0, traceDepth, err, "")
+	if err != nil {
+		if o.Verbose > 0 {
+			o.Logger.Printf("[websocket] portal disconnected %v | %v", portalAddress, err.Error())
+		}
+		_ = message.Error(500, "connect to portal %v fail %v", portalAddress, err.Error())
+	}
+	return err
 }
 func (o *WebsocketGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) error {
 	return o.MemGateway.Publish(message, discovery)
@@ -312,7 +330,7 @@ func (o *WebsocketGateway) Broadcast(message *qtiny.Message, discovery qtiny.Dis
 
 func (o *WebsocketGateway) GetType() string {
 	if len(o.Type) == 0 {
-		o.Type = "websocket"
+		o.Type = "[websocket]"
 	}
 	return o.Type
 }
