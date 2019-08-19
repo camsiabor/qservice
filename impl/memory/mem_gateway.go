@@ -260,7 +260,8 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 	}
 
 	if message.Type&qtiny.MessageTypeReply > 0 {
-		var portal = discovery.PortalGet(message.Address)
+		var portalAddr = message.Address + "." + message.Gatekey
+		var portal = discovery.PortalGet(portalAddr)
 		if o.Verbose > 0 {
 			if portal == nil {
 				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal nil (%v) as reply %v", o.NodeId, o.Id, message.Address, message.String()))

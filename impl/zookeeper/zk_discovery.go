@@ -434,7 +434,7 @@ func (o *ZooDiscovery) portalWatch(event *zk.Event, stat *zk.Stat, data interfac
 		portal.SetMeta(meta)
 	}
 
-	o.Logger.Printf("portal %v meta change", portal.Address)
+	o.Logger.Printf("portal %v meta change | %v", portal.Address, meta)
 
 	portal.Type = util.GetStr(portal.Meta, "", "type")
 
