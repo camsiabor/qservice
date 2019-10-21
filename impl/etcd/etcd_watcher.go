@@ -103,7 +103,7 @@ func (o *EtcdWatcher) connectLoop(timer *qroutine.Timer, err error) {
 	}
 
 	var ctx, _ = context.WithTimeout(context.TODO(), o.ReconnectInterval)
-	grant, err := o.lease.Grant(ctx, int64(o.ReconnectInterval/time.Second)+2)
+	grant, err := o.lease.Grant(ctx, int64(o.ReconnectInterval/time.Second))
 	if err != nil {
 		o.Logger.Println(err)
 		o.notifyConnectStateChange(false, false)

@@ -160,7 +160,7 @@ func (o *MemGateway) Post(message *qtiny.Message, discovery qtiny.Discovery) err
 		clone.LocalFlag = qtiny.MessageFlagLocalOnly
 	}
 	if o.Verbose > 0 {
-		o.Logger.Printf(qerr.StackString(0, o.Verbose+1, "[gateway] [%v.%v] posting %v", o.NodeId, o.Id, clone.String()))
+		o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] posting %v", o.NodeId, o.Id, clone.String()))
 	}
 	o.Queue <- clone
 	return nil
@@ -202,7 +202,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		}
 		if message.ReplyId > 0 {
 			if o.Verbose > 0 {
-				o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] reply error | %v | %v", o.NodeId, o.Id, err.Error(), message.String()))
+				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] reply error | %v | %v", o.NodeId, o.Id, err.Error(), message.String()))
 			}
 			_ = message.Error(500, err.Error())
 		}
@@ -227,7 +227,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 
 	if message.LocalFlag&qtiny.MessageFlagLocalOnly > 0 {
 		if o.Verbose > 0 {
-			o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] to local by flag | %v", o.NodeId, o.Id, message.String()))
+			o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to local by flag | %v", o.NodeId, o.Id, message.String()))
 		}
 		return o.Post(message, discovery)
 	}
@@ -241,7 +241,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		if local != nil {
 			message.LocalFlag = message.LocalFlag & qtiny.MessageFlagLocalOnly
 			if o.Verbose > 0 {
-				o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] to local by same node | %v", o.NodeId, o.Id, message.String()))
+				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to local by same node | %v", o.NodeId, o.Id, message.String()))
 			}
 			err = o.Post(message, discovery)
 			return err
@@ -264,9 +264,9 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		var portal = discovery.PortalGet(portalAddr)
 		if o.Verbose > 0 {
 			if portal == nil {
-				o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] to portal nil (%v) as reply %v", o.NodeId, o.Id, message.Address, message.String()))
+				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal nil (%v) as reply %v", o.NodeId, o.Id, message.Address, message.String()))
 			} else {
-				o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetType(), portal.GetAddress(), message.String()))
+				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) as reply %v", o.NodeId, o.Id, portal.GetType(), portal.GetAddress(), message.String()))
 			}
 
 		}
@@ -322,12 +322,12 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 			if err == nil {
 				published = true
 				if o.Verbose > 0 {
-					o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String()))
+					o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String()))
 				}
 				break
 			} else {
 				if o.Verbose > 0 {
-					o.Logger.Printf(qerr.StackString(0, o.Verbose+2, "[gateway] [%v.%v] to portal %v (%v) fail as request %v %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String(), err.Error()))
+					o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) fail as request %v %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String(), err.Error()))
 				}
 			}
 		}
