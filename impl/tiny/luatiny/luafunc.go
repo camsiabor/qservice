@@ -36,6 +36,7 @@ func (o *luaunit) init(restart bool) (err error) {
 
 		// message
 		"MessageReply": o.messageReply,
+		"MessageError": o.messageError,
 	})
 
 	return err
@@ -57,6 +58,21 @@ func (o *luaunit) messageReply(L *lua.State) int {
 	var code = L.ToInteger(2)
 	var reply = L.ToString(3)
 	var err = message.Reply(code, reply)
+	if err == nil {
+		L.PushNil()
+	} else {
+		L.PushString(err.Error())
+	}
+	return 1
+}
+
+func (o *luaunit) messageError(L *lua.State) int {
+	var ptrvalue = L.ToInteger(1)
+	var ptr = unsafe.Pointer(uintptr(ptrvalue))
+	var message = (*qtiny.Message)(ptr)
+	var code = L.ToInteger(2)
+	var reply = L.ToString(3)
+	var err = message.Error(code, reply)
 	if err == nil {
 		L.PushNil()
 	} else {
