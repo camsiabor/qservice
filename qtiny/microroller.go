@@ -124,7 +124,7 @@ func (o *Microroller) dispatchMessage(msg *Message, linger *gatewayLinger) {
 			return
 		}
 		if o.Verbose > 0 {
-			o.logger.Printf("[microroller] handle error %v | %v", util.AsError(pan), msg.String())
+			o.logger.Printf(qerr.StackString(1, o.Verbose, "[microroller] handle error %v | %v", util.AsError(pan), msg.String()))
 		}
 		if o.ErrHandler != nil {
 			o.ErrHandler("dispatch", pan, o)
@@ -140,7 +140,12 @@ func (o *Microroller) dispatchMessage(msg *Message, linger *gatewayLinger) {
 	}
 
 	var nano = o.nanos[msg.Address]
-	if nano != nil {
+	if nano == nil {
+		if msg.microroller == nil {
+			msg.microroller = o
+		}
+		_ = msg.Error(404, "["+linger.gatekey+"] no service found "+msg.Address)
+	} else {
 		if o.Verbose > 0 {
 			o.logger.Printf("[microroller] dispatch %v", msg.String())
 		}
