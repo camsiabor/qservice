@@ -289,13 +289,13 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 		if timeouted {
 			request.Canceled = true
 			if o.Verbose > 0 {
-				o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] response timeout %v", request.String()))
+				o.logger.Printf(qerr.StackString(0, o.Verbose+1, "[microroller] response timeout %v", request.String()))
 			}
 			return response, qerr.StackStringErr(0, 1024, "wait for %v reply timeout %d", request.Address, request.Timeout/1000/1000)
 		}
 		if o.Verbose > 0 {
-			o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] response receveid [request] %v", request.String()))
-			o.logger.Printf("[microroller] response receveid [respons] %v", response.String())
+			o.logger.Printf(qerr.StackString(0, o.Verbose+1, "[microroller] response receveid [request] %v", request.String()))
+			o.logger.Printf("[microroller] response receveid [response] %v", response.String())
 		}
 	}
 	return request.Related, nil
