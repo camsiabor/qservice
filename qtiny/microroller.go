@@ -253,7 +253,7 @@ func (o *Microroller) generateMessageId(linger *gatewayLinger) uint64 {
 func (o *Microroller) Post(gatekey string, request *Message) (response *Message, err error) {
 
 	if o.Verbose > 0 {
-		o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] posting %v", request.String()))
+		o.logger.Printf(qerr.StackString(0, o.Verbose+1, "[microroller] posting %v", request.String()))
 	}
 	var linger = o.getGatewayLinger(gatekey, true)
 	if linger == nil {

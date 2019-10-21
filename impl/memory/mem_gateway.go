@@ -322,12 +322,12 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 			if err == nil {
 				published = true
 				if o.Verbose > 0 {
-					o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String())
+					o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String()))
 				}
 				break
 			} else {
 				if o.Verbose > 0 {
-					o.Logger.Printf("[gateway] [%v.%v] to portal %v (%v) fail as request %v %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String(), err.Error())
+					o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) fail as request %v %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String(), err.Error()))
 				}
 			}
 		}
