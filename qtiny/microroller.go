@@ -261,7 +261,7 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 	}
 	request.Gatekey = linger.gatekey
 
-	if request.Timeout > 0 || request.Handler != nil {
+	if request.Type != MessageTypeReply && (request.Timeout > 0 || request.Handler != nil) {
 
 		request.ReplyId = o.generateMessageId(linger)
 
