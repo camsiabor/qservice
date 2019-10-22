@@ -44,14 +44,16 @@ type Message struct {
 
 	Err error
 
-	Sender         string
-	Replier        string
+	Sender   string
+	Receiver string
+
 	Session        string
 	SessionRelated interface{}
 
 	Headers MessageHeaders
 	Options MessageOptions
 
+	Replier    string
 	ReplyId    uint64
 	ReplyErr   string
 	ReplyTrace string
@@ -91,6 +93,10 @@ func (o *Message) Reply(code int, data interface{}) error {
 
 	o.Timeout = 0
 
+	if o.microroller == nil {
+		panic("no microroller is set in message for Reply()")
+	}
+	o.Replier = o.microroller.GetTina().GetNodeId()
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }
@@ -100,8 +106,12 @@ func (o *Message) IsError() bool {
 }
 
 func (o *Message) Error(code int, errmsg string, args ...interface{}) error {
+
 	o.Type = MessageTypeReply
 	o.ReplyCode = code
+
+	o.Timeout = 0
+
 	if args == nil {
 		o.ReplyErr = errmsg
 	} else {
@@ -113,6 +123,11 @@ func (o *Message) Error(code int, errmsg string, args ...interface{}) error {
 		}
 		o.ReplyTrace = qerr.StackString(1, o.TraceDepth, errmsg)
 	}
+
+	if o.microroller == nil {
+		panic("no microroller is set in message for Reply()")
+	}
+	o.Replier = o.microroller.GetTina().GetNodeId()
 	_, err := o.microroller.Post(o.Gatekey, o)
 	return err
 }

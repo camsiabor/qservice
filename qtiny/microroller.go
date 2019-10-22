@@ -27,6 +27,7 @@ type gatewayLinger struct {
 type Microroller struct {
 	mutex sync.RWMutex
 
+	tina      *Tina
 	discovery Discovery
 
 	gatewaysMutex sync.RWMutex
@@ -44,6 +45,10 @@ type Microroller struct {
 	ErrHandler OverseerErrorHandler
 
 	Verbose int
+}
+
+func (o *Microroller) GetTina() *Tina {
+	return o.tina
 }
 
 func (o *Microroller) Start(config map[string]interface{}) error {

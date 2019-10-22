@@ -127,6 +127,8 @@ func (o *Tina) initMicroroller(config map[string]interface{}) error {
 	if o.microroller == nil {
 		o.microroller = &Microroller{}
 	}
+	o.microroller.tina = o
+
 	if o.microroller.GetLogger() == nil {
 		o.microroller.SetLogger(o.logger)
 	}
