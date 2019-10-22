@@ -213,11 +213,14 @@ func (o *Message) ToMap() map[string]interface{} {
 
 		"ShareFlag": o.ShareFlag,
 
-		"Sender":    o.Sender,
+		"Sender":   o.Sender,
+		"Receiver": o.Receiver,
+
+		"Session": o.Session,
+		"Data":    o.Data,
+		"Timeout": o.Timeout,
+
 		"Replier":   o.Replier,
-		"Session":   o.Session,
-		"Data":      o.Data,
-		"Timeout":   o.Timeout,
 		"ReplyId":   o.ReplyId,
 		"ReplyCode": o.ReplyCode,
 
@@ -250,6 +253,7 @@ func (o *Message) FromMap(m map[string]interface{}) {
 	o.Gatekey = util.AsStr(m["Gatekey"], "")
 
 	o.Sender = util.AsStr(m["Sender"], "")
+	o.Receiver = util.AsStr(m["Receiver"], "")
 
 	o.Session = util.AsStr(m["Session"], "")
 
