@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"fmt"
 	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
@@ -286,6 +287,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		return err
 	}
 
+	// broadcast
 	if message.Type&qtiny.MessageTypeBroadcast > 0 {
 		var portalAddresses = remote.PortalAddresses()
 		var portalCount = len(portalAddresses)
@@ -303,21 +305,42 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		return nil
 	}
 
+	// multicast
 	if message.Type&qtiny.MessageTypeMulticast > 0 {
 		return qerr.StackStringErr(0, message.GetTraceDepth(), "multicast is not implement")
+	}
+
+	// specified portal address
+	if len(message.Replier) > 0 {
+		var portal = discovery.PortalGet(message.Replier)
+		if portal == nil {
+			return fmt.Errorf("portal not found :" + message.Replier)
+		}
+		err = o.Publisher(qtiny.MessageTypeSend, portal.GetAddress(), portal, remote, message, discovery, o, data)
+		if err == nil {
+			if o.Verbose > 0 {
+				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) as request %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String()))
+			}
+		} else {
+			if o.Verbose > 0 {
+				o.Logger.Printf(qerr.StackString(0, o.Verbose, "[gateway] [%v.%v] to portal %v (%v) fail as request %v %v", o.NodeId, o.Id, portal.GetAddress(), portal.GetType(), message.String(), err.Error()))
+			}
+		}
+		return nil
 	}
 
 	var portalAddresses, pointer = remote.PortalPointer()
 	if portalAddresses == nil {
 		return qerr.StackStringErr(0, message.GetTraceDepth(), "%v.%v portal addresses is empty for %v", o.NodeId, o.Id, message.Address)
 	}
+
+	// random portal address
 	var published = false
 	var portalCount = len(portalAddresses)
 	for i := 0; i < portalCount; i++ {
 		var portalAddress = portalAddresses[pointer]
 		var portal = discovery.PortalGet(portalAddress)
 		if portal != nil && portal.GetTypeHash() == o.GetTypeHash() {
-
 			err = o.Publisher(qtiny.MessageTypeSend, portalAddress, portal, remote, message, discovery, o, data)
 			if err == nil {
 				published = true
@@ -335,12 +358,13 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		if pointer >= portalCount {
 			pointer = 0
 		}
-
 	}
+
 	if err == nil && !published {
 		err = qerr.StackStringErr(0, message.GetTraceDepth(),
 			"cannot find any possible portal for gateway type %v [%v.%v]", o.GetType(), o.NodeId, o.Id)
 	}
+
 	return err
 }
 
