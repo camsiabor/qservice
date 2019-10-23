@@ -94,7 +94,10 @@ func (o *Message) Reply(code int, data interface{}) error {
 	o.Timeout = 0
 
 	if o.microroller == nil {
-		panic("no microroller is set in message for Reply()")
+		o.microroller = GetTina().GetMicroroller()
+		if o.microroller == nil {
+			panic("no microroller is set in message & tina for Message.Reply()")
+		}
 	}
 	o.Replier = o.microroller.GetTina().GetNodeId()
 	_, err := o.microroller.Post(o.Gatekey, o)
@@ -125,7 +128,10 @@ func (o *Message) Error(code int, errmsg string, args ...interface{}) error {
 	}
 
 	if o.microroller == nil {
-		panic("no microroller is set in message for Reply()")
+		o.microroller = GetTina().GetMicroroller()
+		if o.microroller == nil {
+			panic("no microroller is set in message & tina for Message.Error()")
+		}
 	}
 	o.Replier = o.microroller.GetTina().GetNodeId()
 	_, err := o.microroller.Post(o.Gatekey, o)
