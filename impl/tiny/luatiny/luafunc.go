@@ -35,8 +35,9 @@ func (o *luaunit) init(restart bool) (err error) {
 		"NanoLocalRegister": o.nanoLocalRegister,
 
 		// message
-		"MessageReply": o.messageReply,
-		"MessageError": o.messageError,
+		"MsgReply": o.msgReply,
+		"MsgError": o.msgError,
+		"MsgEasy":  o.msgEasy,
 	})
 
 	return err
@@ -51,7 +52,7 @@ func (o *luaunit) addTimer(L *lua.State) int {
 
 /* ===================== message ==================== */
 
-func (o *luaunit) messageReply(L *lua.State) int {
+func (o *luaunit) msgReply(L *lua.State) int {
 	var ptrvalue = L.ToInteger(1)
 	var ptr = unsafe.Pointer(uintptr(ptrvalue))
 	var message = (*qtiny.Message)(ptr)
@@ -66,7 +67,7 @@ func (o *luaunit) messageReply(L *lua.State) int {
 	return 1
 }
 
-func (o *luaunit) messageError(L *lua.State) int {
+func (o *luaunit) msgError(L *lua.State) int {
 	var ptrvalue = L.ToInteger(1)
 	var ptr = unsafe.Pointer(uintptr(ptrvalue))
 	var message = (*qtiny.Message)(ptr)
@@ -79,6 +80,18 @@ func (o *luaunit) messageError(L *lua.State) int {
 		L.PushString(err.Error())
 	}
 	return 1
+}
+
+func (o *luaunit) msgEasy(L *lua.State) int {
+	var ptrvalue = L.ToInteger(1)
+	var ptr = unsafe.Pointer(uintptr(ptrvalue))
+	var message = (*qtiny.Message)(ptr)
+
+	luar.Register(L, "", map[string]interface{}{
+		"theM": message,
+	})
+
+	return 0
 }
 
 /* ===================== service ==================== */
