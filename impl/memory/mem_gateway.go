@@ -315,7 +315,7 @@ func (o *MemGateway) Publish(message *qtiny.Message, discovery qtiny.Discovery) 
 		var portalAddress = message.Receiver + "." + message.Gatekey
 		var portal = discovery.PortalGet(portalAddress)
 		if portal == nil {
-			return fmt.Errorf("portal not found :" + portalAddress)
+			return fmt.Errorf("portal not found : " + portalAddress)
 		}
 		err = o.Publisher(qtiny.MessageTypeSend, portal.GetAddress(), portal, remote, message, discovery, o, data)
 		if err == nil {

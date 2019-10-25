@@ -115,5 +115,5 @@ func (o *luaunit) stop(lock bool) {
 }
 
 func (o *luaunit) string() string {
-	return fmt.Sprintf("[ %v @ %v # %v ]", o.guide.Name, o.name, o.path)
+	return fmt.Sprintf("[ %v | %v | %v ]", o.guide.Name, o.name, o.path)
 }

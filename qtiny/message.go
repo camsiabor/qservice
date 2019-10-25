@@ -327,7 +327,8 @@ func (o *Message) ToJsonString() (string, error) {
 }
 
 func (o *Message) String() string {
-	return fmt.Sprintf("| session [%v] reply_id [%v] type [%v] address [%v] sender [%v.%v] %v {%v} |", o.Session, o.ReplyId, o.TypeString(), o.Address, o.Sender, o.Gatekey, o.ReplyErr, o.Timeout)
+	return fmt.Sprintf("| session [%v] reply_id [%v] type [%v] address [%v] gate [%v] sender [%v] receiver [%v] %v {%v} |",
+		o.Session, o.ReplyId, o.TypeString(), o.Address, o.Gatekey, o.Sender, o.Receiver, o.ReplyErr, o.Timeout)
 }
 
 func (o *Message) TypeString() string {
