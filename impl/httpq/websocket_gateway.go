@@ -173,6 +173,7 @@ func (o *WebsocketGateway) recvLoop(client *wssession) {
 		defer o.wssessionsMutex.Unlock()
 		delete(o.wssessions, client.id)
 	}()
+
 	defer func() {
 		client.conn.Close()
 	}()

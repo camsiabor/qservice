@@ -305,7 +305,9 @@ func (o *Microroller) Post(gatekey string, request *Message) (response *Message,
 		}
 		if o.Verbose > 0 {
 			o.logger.Printf(qerr.StackString(0, o.Verbose, "[microroller] response receveid [request] %v", request.String()))
-			o.logger.Printf("[microroller] response receveid [response] %v", response.String())
+			if response != nil {
+				o.logger.Printf("[microroller] response receveid [response] %v", response.String())
+			}
 		}
 	}
 	return request.Related, nil
