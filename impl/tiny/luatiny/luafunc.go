@@ -54,7 +54,7 @@ func (o *Luaunit) addTimer(L *lua.State) int {
 
 func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 
-	if !L.IsTable(-1) {
+	if !L.IsTable(1) {
 		L.PushString("invalid argument! need a table")
 		return 1
 	}
