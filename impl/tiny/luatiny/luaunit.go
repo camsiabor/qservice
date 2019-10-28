@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-type luaunit struct {
+type Luaunit struct {
 	L *lua.State
 
 	guide *LuaTinyGuide
@@ -31,7 +31,7 @@ type luaunit struct {
 	nanos     map[string]*qtiny.Nano
 }
 
-func (o *luaunit) start(restart bool) (err error) {
+func (o *Luaunit) start(restart bool) (err error) {
 
 	defer func() {
 		var pan = recover()
@@ -83,7 +83,7 @@ func (o *luaunit) start(restart bool) (err error) {
 	return err
 }
 
-func (o *luaunit) stop(lock bool) {
+func (o *Luaunit) stop(lock bool) {
 
 	if lock {
 		o.mutex.Lock()
@@ -114,6 +114,6 @@ func (o *luaunit) stop(lock bool) {
 	o.logger.Println(o.string(), "stop")
 }
 
-func (o *luaunit) string() string {
+func (o *Luaunit) string() string {
 	return fmt.Sprintf("[ %v | %v | %v ]", o.guide.Name, o.name, o.path)
 }

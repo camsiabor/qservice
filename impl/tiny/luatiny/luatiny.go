@@ -31,7 +31,7 @@ type LuaTinyGuide struct {
 	mutex sync.RWMutex
 
 	unitMutex sync.RWMutex
-	units     map[string]*luaunit
+	units     map[string]*Luaunit
 
 	tiny qtiny.TinyKind
 
@@ -49,7 +49,7 @@ func NewLuaTinyGuide(name string, configPath string) *LuaTinyGuide {
 	guide.ConfigPathAbs, _ = filepath.Abs(configPath)
 	guide.TinyGuide.Start = guide.start
 	guide.TinyGuide.Stop = guide.stop
-	guide.units = make(map[string]*luaunit)
+	guide.units = make(map[string]*Luaunit)
 	return guide
 }
 
@@ -154,19 +154,19 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 
 }
 
-func (o *LuaTinyGuide) luaunitGet(name string, create bool) *luaunit {
+func (o *LuaTinyGuide) luaunitGet(name string, create bool) *Luaunit {
 
 	if o.units == nil {
 		func() {
 			o.unitMutex.Lock()
 			defer o.unitMutex.Unlock()
 			if o.units == nil {
-				o.units = make(map[string]*luaunit)
+				o.units = make(map[string]*Luaunit)
 			}
 		}()
 	}
 
-	var one *luaunit
+	var one *Luaunit
 	func() {
 		o.unitMutex.RLock()
 		defer o.unitMutex.RUnlock()
@@ -181,7 +181,7 @@ func (o *LuaTinyGuide) luaunitGet(name string, create bool) *luaunit {
 		return nil
 	}
 
-	one = &luaunit{}
+	one = &Luaunit{}
 	one.guide = o
 	one.name = name
 	one.logger = o.Logger

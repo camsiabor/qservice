@@ -5,12 +5,13 @@ import (
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/qerr"
 	"github.com/camsiabor/qcom/util"
+	"github.com/camsiabor/qservice/impl/tiny/luatiny/lmod"
 	"github.com/camsiabor/qservice/qtiny"
 	"github.com/twinj/uuid"
 	"unsafe"
 )
 
-func (o *luaunit) init(restart bool) (err error) {
+func (o *Luaunit) init(restart bool) (err error) {
 
 	if !restart && o.L != nil {
 		return nil
@@ -25,78 +26,33 @@ func (o *luaunit) init(restart bool) (err error) {
 		"tina": o.guide.tiny.GetTina(),
 	})
 
-	err = o.L.TableRegisters("qtiny", map[string]interface{}{
+	var tinaRegistry = map[string]interface{}{}
+	tinaRegistry["AddTimer"] = o.addTimer
+	tinaRegistry["AddCloseHandler"] = lua.AddCloseHandlerDefault
+	tinaRegistry["NanoLocalRegister"] = o.nanoLocalRegister
 
-		// life cycle
-		"AddTimer":        o.addTimer,
-		"AddCloseHandler": lua.AddCloseHandlerDefault,
+	if err = o.L.TableRegisters("qtiny", tinaRegistry); err != nil {
+		return err
+	}
 
-		// service
-		"NanoLocalRegister": o.nanoLocalRegister,
-
-		// message
-		"MsgReply": o.msgReply,
-		"MsgError": o.msgError,
-		"MsgEasy":  o.msgEasy,
-	})
+	var msgRegistry = map[string]interface{}{}
+	lmod.RegisterLuaMessageFunc(msgRegistry)
+	if err = o.L.TableRegisters("qmsg", msgRegistry); err != nil {
+		return err
+	}
 
 	return err
 }
 
 /* ===================== life cycle ==================== */
 
-func (o *luaunit) addTimer(L *lua.State) int {
-
-	return 0
-}
-
-/* ===================== message ==================== */
-
-func (o *luaunit) msgReply(L *lua.State) int {
-	var ptrvalue = L.ToInteger(1)
-	var ptr = unsafe.Pointer(uintptr(ptrvalue))
-	var message = (*qtiny.Message)(ptr)
-	var code = L.ToInteger(2)
-	var reply = L.ToString(3)
-	var err = message.Reply(code, reply)
-	if err == nil {
-		L.PushNil()
-	} else {
-		L.PushString(err.Error())
-	}
-	return 1
-}
-
-func (o *luaunit) msgError(L *lua.State) int {
-	var ptrvalue = L.ToInteger(1)
-	var ptr = unsafe.Pointer(uintptr(ptrvalue))
-	var message = (*qtiny.Message)(ptr)
-	var code = L.ToInteger(2)
-	var reply = L.ToString(3)
-	var err = message.Error(code, reply)
-	if err == nil {
-		L.PushNil()
-	} else {
-		L.PushString(err.Error())
-	}
-	return 1
-}
-
-func (o *luaunit) msgEasy(L *lua.State) int {
-	var ptrvalue = L.ToInteger(1)
-	var ptr = unsafe.Pointer(uintptr(ptrvalue))
-	var message = (*qtiny.Message)(ptr)
-
-	luar.Register(L, "", map[string]interface{}{
-		"theM": message,
-	})
-
+func (o *Luaunit) addTimer(L *lua.State) int {
 	return 0
 }
 
 /* ===================== service ==================== */
 
-func (o *luaunit) nanoLocalRegister(L *lua.State) int {
+func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 
 	if !L.IsTable(-1) {
 		L.PushString("invalid argument! need a table")
