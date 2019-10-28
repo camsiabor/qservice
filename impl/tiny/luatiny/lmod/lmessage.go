@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
+	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"unsafe"
 )
@@ -12,7 +13,11 @@ func RegisterLuaMessageFunc(registry map[string]interface{}) {
 
 	registry["Easy"] = msgEasy
 
+	registry["Address"] = msgAddress
+	registry["Session"] = msgSession
+	registry["TypeString"] = msgTypeString
 	registry["Gatekey"] = msgGatekey
+
 	registry["Sender"] = msgSender
 	registry["Receiver"] = msgReceiver
 
@@ -24,7 +29,9 @@ func RegisterLuaMessageFunc(registry map[string]interface{}) {
 	registry["Reply"] = msgReply
 	registry["Replier"] = msgReplier
 	registry["ReplyErr"] = msgReplyErr
+	registry["ReplyTrace"] = msgReplyTrace
 	registry["ReplyCode"] = msgReplyCode
+	registry["ReplyData"] = msgReplyData
 
 }
 
@@ -35,6 +42,24 @@ func msgInstance(L *lua.State) *qtiny.Message {
 	var ptr = unsafe.Pointer(uintptr(ptrvalue))
 	var message = (*qtiny.Message)(ptr)
 	return message
+}
+
+func msgAddress(L *lua.State) int {
+	var message = msgInstance(L)
+	L.PushString(message.Address)
+	return 1
+}
+
+func msgSession(L *lua.State) int {
+	var message = msgInstance(L)
+	L.PushString(message.Session)
+	return 1
+}
+
+func msgTypeString(L *lua.State) int {
+	var message = msgInstance(L)
+	L.PushString(message.TypeString())
+	return 1
 }
 
 func msgGatekey(L *lua.State) int {
@@ -63,7 +88,7 @@ func msgReceiver(L *lua.State) int {
 
 func msgData(L *lua.State) int {
 
-	message := msgInstance(L)
+	var message = msgInstance(L)
 
 	if message.Data == nil {
 		L.PushNil()
@@ -114,6 +139,27 @@ func msgReplyTrace(L *lua.State) int {
 	return 1
 }
 
+func msgReplyData(L *lua.State) int {
+	var message = msgInstance(L)
+	if message.ReplyData == nil {
+		L.PushNil()
+		return 1
+	}
+	var str, ok = message.ReplyData.(string)
+	if ok {
+		L.PushString(str)
+	} else {
+		var bytes, err = json.Marshal(message.ReplyData)
+		if err == nil {
+			L.PushString(string(bytes))
+		} else {
+			str = util.AsStr(message.ReplyData, "")
+			L.PushString(str)
+		}
+	}
+	return 1
+}
+
 func msgReply(L *lua.State) int {
 	var message = msgInstance(L)
 	var code = L.ToInteger(2)
@@ -137,6 +183,7 @@ func msgError(L *lua.State) int {
 	} else {
 		L.PushString(err.Error())
 	}
+
 	return 1
 }
 
@@ -148,6 +195,9 @@ func msgEasy(L *lua.State) int {
 	luar.Register(L, "", map[string]interface{}{
 		"theM": message,
 	})
+
+	// TODO
+	// L.GetGlobal("theM")
 
 	return 0
 }
