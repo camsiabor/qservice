@@ -20,8 +20,10 @@ func RegisterLuaMessageFunc(registry map[string]interface{}) {
 	registry["MessageTypeBroadcast"] = qtiny.MessageTypeBroadcast
 	registry["MessageTypeMulticast"] = qtiny.MessageTypeMulticast
 
-	// method
+	registry["MessageFlagLocalOnly"] = qtiny.MessageFlagLocalOnly
+	registry["MessageFlagRemoteOnly"] = qtiny.MessageFlagRemoteOnly
 
+	// method
 	registry["New"] = msgNew
 
 	registry["Easy"] = msgEasy
@@ -40,6 +42,7 @@ func RegisterLuaMessageFunc(registry map[string]interface{}) {
 
 	registry["String"] = msgString
 	registry["ToJson"] = msgToJson
+	registry["FromJson"] = msgFromJson
 
 	registry["IsError"] = msgIsError
 	registry["Error"] = msgError
@@ -103,10 +106,11 @@ func msgNew(L *lua.State) int {
 	} else {
 		// new message instance
 		message = &qtiny.Message{}
+		message.Type = qtiny.MessageTypeSend
 	}
 
 	// message type
-	msgType, err := L.TableGetInteger(-1, "Type", int(uint32(qtiny.MessageTypeSend)))
+	msgType, err := L.TableGetInteger(-1, "Type", int(uint32(qtiny.MessageTypeSend)), false)
 	if err != nil {
 		errstr = "invalid message type : " + err.Error()
 		return 2
@@ -114,15 +118,23 @@ func msgNew(L *lua.State) int {
 	message.Type = qtiny.MessageType(msgType)
 
 	// address
-	address, err := L.TableGetString(-1, "Address", "")
+	address, err := L.TableGetString(-1, "Address", "", true)
 	if err != nil {
 		errstr = "invalid address : " + err.Error()
 		return 2
 	}
 	message.Address = address
 
+	// message data
+	data, err := L.TableGetValue(-1, "Data", nil, false)
+	if err != nil {
+		errstr = "invalid address : " + err.Error()
+		return 2
+	}
+	message.Data = data
+
 	// receiver
-	receiver, err := L.TableGetString(-1, "Receiver", "")
+	receiver, err := L.TableGetString(-1, "Receiver", "", false)
 	if err != nil {
 		errstr = "invalid receiver : " + err.Error()
 		return 2
@@ -130,7 +142,7 @@ func msgNew(L *lua.State) int {
 	message.Receiver = receiver
 
 	// share flag
-	shareFlag, err := L.TableGetInteger(-1, "ShareFlag", 0)
+	shareFlag, err := L.TableGetInteger(-1, "ShareFlag", 0, false)
 	if err != nil {
 		errstr = "invalid share flag : " + err.Error()
 		return 2
@@ -138,7 +150,7 @@ func msgNew(L *lua.State) int {
 	message.ShareFlag = qtiny.MessageFlag(util.AsUInt32(shareFlag, 0))
 
 	// local flag
-	localFlag, err := L.TableGetInteger(-1, "LocalFlag", 0)
+	localFlag, err := L.TableGetInteger(-1, "LocalFlag", 0, false)
 	if err != nil {
 		errstr = "invalid local flag : " + err.Error()
 		return 2
@@ -146,7 +158,7 @@ func msgNew(L *lua.State) int {
 	message.LocalFlag = qtiny.MessageFlag(util.AsUInt32(localFlag, 0))
 
 	// timeout
-	timeout, err := L.TableGetInteger(-1, "Timeout", 15000)
+	timeout, err := L.TableGetInteger(-1, "Timeout", 15000, false)
 	if err != nil {
 		errstr = "invalid timeout : " + err.Error()
 		return 2
@@ -155,7 +167,7 @@ func msgNew(L *lua.State) int {
 
 	// reply handler
 	var hasHandler = false
-	handlerRef, err := L.TableGetAndRef(-1, "Handler", func(L *lua.State, tableIndex int, key string) error {
+	handlerRef, err := L.TableGetAndRef(-1, "Handler", false, func(L *lua.State, tableIndex int, key string) error {
 		if L.IsNil(-1) {
 			return nil
 		}
@@ -185,7 +197,7 @@ func msgNew(L *lua.State) int {
 	}
 
 	// trace depth
-	traceDepth, err := L.TableGetInteger(-1, "TraceDepth", 15000)
+	traceDepth, err := L.TableGetInteger(-1, "TraceDepth", 1, false)
 	if err != nil {
 		errstr = "invalid trace depth : " + err.Error()
 		return 2
@@ -277,6 +289,22 @@ func msgToJson(L *lua.State) int {
 	}
 
 	return 2
+}
+
+func msgFromJson(L *lua.State) int {
+	if !L.IsString(2) {
+		L.PushString("paramter 2 is not a string : " + L.Typename(2))
+		return 1
+	}
+	var jsonstr = L.ToString(2)
+	var message = msgInstance(L)
+	var err = message.FromJson([]byte(jsonstr))
+	if err == nil {
+		L.PushNil()
+	} else {
+		L.PushString(err.Error())
+	}
+	return 1
 }
 
 func msgSender(L *lua.State) int {

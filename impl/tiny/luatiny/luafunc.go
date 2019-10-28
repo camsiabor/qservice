@@ -17,6 +17,8 @@ func (o *Luaunit) init(restart bool) (err error) {
 		return nil
 	}
 
+	o.tina = o.guide.tiny.GetTina()
+
 	o.L, err = InitLuaState(o.guide.LuaPath, o.guide.LuaCPath)
 	if err != nil {
 		return
@@ -51,6 +53,19 @@ func (o *Luaunit) addTimer(L *lua.State) int {
 }
 
 /* ===================== service ==================== */
+func (o *Luaunit) msgPost(L *lua.State) int {
+
+	var microroller = o.tina.GetMicroroller()
+	if microroller == nil {
+		L.PushString("microroller is null in tina : " + o.tina.GetNodeId())
+		return 1
+	}
+
+	var gatekey = L.ToString(1)
+
+	L.PushNil()
+	return 1
+}
 
 func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 
@@ -59,14 +74,14 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 		return 1
 	}
 
-	address, err := L.TableGetString(-1, "Address", "")
+	address, err := L.TableGetString(-1, "Address", "", true)
 	if err != nil {
 		L.PushString("invalid address : " + err.Error())
 		return 1
 	}
-	flag, _ := L.TableGetInteger(-1, "Flag", 0)
+	flag, _ := L.TableGetInteger(-1, "Flag", 0, false)
 
-	handlerRef, err := L.TableGetAndRef(-1, "Handler", func(L *lua.State, tableIndex int, key string) error {
+	handlerRef, err := L.TableGetAndRef(-1, "Handler", true, func(L *lua.State, tableIndex int, key string) error {
 		if !L.IsFunction(-1) {
 			return qerr.StackStringErr(0, 1024, "is not a function")
 		}

@@ -16,6 +16,8 @@ type Luaunit struct {
 
 	guide *LuaTinyGuide
 
+	tina *qtiny.Tina
+
 	err  error
 	name string
 	main string
