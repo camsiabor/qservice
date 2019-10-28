@@ -2,22 +2,35 @@ package lmod
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
+	"time"
 	"unsafe"
 )
 
 func RegisterLuaMessageFunc(registry map[string]interface{}) {
 
+	// const
+	registry["MessageTypeSend"] = qtiny.MessageTypeSend
+	registry["MessageTypeFail"] = qtiny.MessageTypeFail
+	registry["MessageTypeReply"] = qtiny.MessageTypeReply
+	registry["MessageTypeBroadcast"] = qtiny.MessageTypeBroadcast
+	registry["MessageTypeMulticast"] = qtiny.MessageTypeMulticast
+
+	// method
+
 	registry["New"] = msgNew
 
 	registry["Easy"] = msgEasy
 
+	registry["Type"] = msgType
+	registry["TypeString"] = msgTypeString
+
 	registry["Address"] = msgAddress
 	registry["Session"] = msgSession
-	registry["TypeString"] = msgTypeString
 	registry["Gatekey"] = msgGatekey
 
 	registry["Sender"] = msgSender
@@ -53,14 +66,133 @@ func msgInstance(L *lua.State) *qtiny.Message {
 	return message
 }
 
-func msgNew(L *lua.State) {
-	/*
-		var message = &qtiny.Message{}
-		message.Address = address
-		message.Data = data
-		message.Timeout = timeout
+func msgNew(L *lua.State) int {
 
-	*/
+	var errstr string
+	var message *qtiny.Message
+	defer func() {
+		if len(errstr) == 0 {
+			var ptrint = uintptr(unsafe.Pointer(message))
+			L.PushInteger(int64(ptrint))
+			L.PushNil()
+		} else {
+			L.PushNil()
+			L.PushString(errstr)
+		}
+	}()
+
+	var top = L.GetTop()
+	if top == 0 {
+		return 2
+	}
+
+	if top == 1 {
+		if !L.IsTable(1) {
+			errstr = "parameter 1 is not a table. current type = " + L.Typename(1)
+			return 2
+		}
+	}
+
+	if L.IsNumber(1) {
+		// modify current message instance
+		if !L.IsTable(2) {
+			errstr = "parameter 2 is not a table. current type = " + L.Typename(2)
+			return 2
+		}
+		message = msgInstance(L)
+	} else {
+		// new message instance
+		message = &qtiny.Message{}
+	}
+
+	// message type
+	msgType, err := L.TableGetInteger(-1, "Type", int(uint32(qtiny.MessageTypeSend)))
+	if err != nil {
+		errstr = "invalid message type : " + err.Error()
+		return 2
+	}
+	message.Type = qtiny.MessageType(msgType)
+
+	// address
+	address, err := L.TableGetString(-1, "Address", "")
+	if err != nil {
+		errstr = "invalid address : " + err.Error()
+		return 2
+	}
+	message.Address = address
+
+	// receiver
+	receiver, err := L.TableGetString(-1, "Receiver", "")
+	if err != nil {
+		errstr = "invalid receiver : " + err.Error()
+		return 2
+	}
+	message.Receiver = receiver
+
+	// share flag
+	shareFlag, err := L.TableGetInteger(-1, "ShareFlag", 0)
+	if err != nil {
+		errstr = "invalid share flag : " + err.Error()
+		return 2
+	}
+	message.ShareFlag = qtiny.MessageFlag(util.AsUInt32(shareFlag, 0))
+
+	// local flag
+	localFlag, err := L.TableGetInteger(-1, "LocalFlag", 0)
+	if err != nil {
+		errstr = "invalid local flag : " + err.Error()
+		return 2
+	}
+	message.LocalFlag = qtiny.MessageFlag(util.AsUInt32(localFlag, 0))
+
+	// timeout
+	timeout, err := L.TableGetInteger(-1, "Timeout", 15000)
+	if err != nil {
+		errstr = "invalid timeout : " + err.Error()
+		return 2
+	}
+	message.Timeout = time.Duration(timeout) * time.Millisecond
+
+	// reply handler
+	var hasHandler = false
+	handlerRef, err := L.TableGetAndRef(-1, "Handler", func(L *lua.State, tableIndex int, key string) error {
+		if L.IsNil(-1) {
+			return nil
+		}
+		hasHandler = true
+		if !L.IsFunction(-1) {
+			return fmt.Errorf("handler is not a function. current type = " + L.Typename(-1))
+		}
+		return nil
+	})
+	if hasHandler {
+		if err == nil {
+			message.Handler = func(message *qtiny.Message) {
+				var ptrint = uintptr(unsafe.Pointer(message))
+				L.RawGeti(lua.LUA_REGISTRYINDEX, handlerRef)
+				L.PushInteger(int64(ptrint))
+				_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
+					var err = util.AsError(pan)
+					if err != nil {
+						_ = message.Error(0, err.Error())
+					}
+				})
+			}
+		} else {
+			errstr = "invalid handler : " + err.Error()
+			return 2
+		}
+	}
+
+	// trace depth
+	traceDepth, err := L.TableGetInteger(-1, "TraceDepth", 15000)
+	if err != nil {
+		errstr = "invalid trace depth : " + err.Error()
+		return 2
+	}
+	message.TraceDepth = traceDepth
+
+	return 2
 }
 
 func msgAddress(L *lua.State) int {
@@ -72,6 +204,26 @@ func msgAddress(L *lua.State) int {
 func msgSession(L *lua.State) int {
 	var message = msgInstance(L)
 	L.PushString(message.Session)
+	return 1
+}
+
+func msgType(L *lua.State) int {
+	var message = msgInstance(L)
+
+	var top = L.GetTop()
+	// message trace depth getter
+	if top == 1 {
+		L.PushNumber(util.AsFloat64(message.Type, 0))
+		return 1
+	}
+	// message trace depth setter
+	if L.IsNumber(2) {
+		var msgtype = L.ToNumber(2)
+		message.Type = qtiny.MessageType(util.AsUInt32(msgtype, 0))
+		L.PushNil()
+	} else {
+		L.PushString("parameter not a number")
+	}
 	return 1
 }
 
