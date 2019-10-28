@@ -29,6 +29,7 @@ func (o *Luaunit) init(restart bool) (err error) {
 	})
 
 	var tinaRegistry = map[string]interface{}{}
+	tinaRegistry["Post"] = o.msgPost
 	tinaRegistry["AddTimer"] = o.addTimer
 	tinaRegistry["AddCloseHandler"] = lua.AddCloseHandlerDefault
 	tinaRegistry["NanoLocalRegister"] = o.nanoLocalRegister
@@ -57,14 +58,31 @@ func (o *Luaunit) msgPost(L *lua.State) int {
 
 	var microroller = o.tina.GetMicroroller()
 	if microroller == nil {
-		L.PushString("microroller is null in tina : " + o.tina.GetNodeId())
-		return 1
+		panic("microroller is null in tina : " + o.tina.GetNodeId())
 	}
 
 	var gatekey = L.ToString(1)
+	var ptrvalue = L.ToInteger(2)
+	if ptrvalue == 0 {
+		panic("paramter 2 pointer value is zero")
+	}
+	var ptr = unsafe.Pointer(uintptr(ptrvalue))
+	var message = (*qtiny.Message)(ptr)
 
+	var response, err = microroller.Post(gatekey, message)
+	if response == nil {
+		L.PushNil()
+	} else {
+		var responseInt = uintptr(unsafe.Pointer(response))
+		L.PushInteger(int64(responseInt))
+	}
+	if err == nil {
+		L.PushNil()
+	} else {
+		L.PushString(err.Error())
+	}
 	L.PushNil()
-	return 1
+	return 2
 }
 
 func (o *Luaunit) nanoLocalRegister(L *lua.State) int {

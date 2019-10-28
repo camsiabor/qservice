@@ -11,6 +11,8 @@ import (
 	"unsafe"
 )
 
+var m = map[string]*qtiny.Message{}
+
 func RegisterLuaMessageFunc(registry map[string]interface{}) {
 
 	// const
@@ -25,6 +27,7 @@ func RegisterLuaMessageFunc(registry map[string]interface{}) {
 
 	// method
 	registry["New"] = msgNew
+	registry["NewSimple"] = msgNewSimple
 
 	registry["Easy"] = msgEasy
 
@@ -67,6 +70,14 @@ func msgInstance(L *lua.State) *qtiny.Message {
 	var ptr = unsafe.Pointer(uintptr(ptrvalue))
 	var message = (*qtiny.Message)(ptr)
 	return message
+}
+
+func msgNewSimple(L *lua.State) int {
+	var message = &qtiny.Message{}
+	var ptrint = uintptr(unsafe.Pointer(message))
+	m["test"] = message
+	L.PushInteger(int64(ptrint))
+	return 1
 }
 
 func msgNew(L *lua.State) int {
@@ -230,7 +241,7 @@ func msgType(L *lua.State) int {
 	}
 	// message trace depth setter
 	if L.IsNumber(2) {
-		var msgtype = L.ToNumber(2)
+		var msgtype = L.ToInteger(2)
 		message.Type = qtiny.MessageType(util.AsUInt32(msgtype, 0))
 		L.PushNil()
 	} else {
@@ -250,7 +261,7 @@ func msgTraceDepth(L *lua.State) int {
 	}
 	// message trace depth setter
 	if L.IsNumber(2) {
-		var depth = L.ToNumber(2)
+		var depth = L.ToInteger(2)
 		message.TraceDepth = int(depth)
 		L.PushNil()
 	} else {
