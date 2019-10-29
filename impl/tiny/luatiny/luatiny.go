@@ -124,8 +124,7 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 		}
 		var config = util.AsMap(v, true)
 		var instance = util.GetInt(config, 1, "instance")
-		var unit = o.luaunitGet(unitname, instance)
-		unit.config = config
+		var unit = o.luaunitGet(unitname, config, instance)
 		if err := unit.start(true); err != nil {
 			o.Logger.Println(unit.string(), "start fail", err.Error())
 		}
@@ -158,7 +157,7 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 
 }
 
-func (o *LuaTinyGuide) luaunitGet(name string, createInstance int) *Luaunit {
+func (o *LuaTinyGuide) luaunitGet(name string, config map[string]interface{}, createInstance int) *Luaunit {
 
 	if o.units == nil {
 		func() {
@@ -187,8 +186,26 @@ func (o *LuaTinyGuide) luaunitGet(name string, createInstance int) *Luaunit {
 
 	one = &Luaunit{}
 	one.guide = o
+	one.index = 1
 	one.name = name
+	one.config = config
 	one.logger = o.Logger
+
+	if createInstance > 1 {
+		var current = one
+		for i := 2; i <= createInstance; i++ {
+			var sibling = &Luaunit{}
+			sibling.guide = o
+			sibling.index = i
+			sibling.name = name
+			sibling.config = config
+			sibling.logger = o.Logger
+
+			current.next = sibling
+
+			current = sibling
+		}
+	}
 
 	func() {
 		o.unitMutex.Lock()

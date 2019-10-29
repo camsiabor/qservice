@@ -28,6 +28,13 @@ func (o *Luaunit) init(restart bool) (err error) {
 		"tina": o.guide.tiny.GetTina(),
 	})
 
+	luar.Register(o.L, "luaunit", map[string]interface{}{
+		"name":   o.name,
+		"index":  o.index,
+		"config": o.config,
+		"path":   o.path,
+	})
+
 	var tinaRegistry = map[string]interface{}{}
 	tinaRegistry["AddTimer"] = o.addTimer
 	tinaRegistry["AddCloseHandler"] = lua.AddCloseHandlerDefault

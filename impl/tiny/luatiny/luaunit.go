@@ -18,6 +18,8 @@ type Luaunit struct {
 
 	tina *qtiny.Tina
 
+	index int
+
 	err  error
 	name string
 	main string
@@ -36,6 +38,17 @@ type Luaunit struct {
 }
 
 func (o *Luaunit) start(restart bool) (err error) {
+	var current = o
+	for current != nil {
+		if err = current.startSelf(restart); err != nil {
+			return err
+		}
+		current = current.next
+	}
+	return nil
+}
+
+func (o *Luaunit) startSelf(restart bool) (err error) {
 
 	defer func() {
 		var pan = recover()
@@ -88,6 +101,14 @@ func (o *Luaunit) start(restart bool) (err error) {
 }
 
 func (o *Luaunit) stop(lock bool) {
+	var current = o
+	for current != nil {
+		current.stopSelf(lock)
+		current = current.next
+	}
+}
+
+func (o *Luaunit) stopSelf(lock bool) {
 
 	if lock {
 		o.mutex.Lock()
@@ -119,7 +140,7 @@ func (o *Luaunit) stop(lock bool) {
 }
 
 func (o *Luaunit) string() string {
-	return fmt.Sprintf("[ %v | %v | %v ]", o.guide.Name, o.name, o.path)
+	return fmt.Sprintf("[ %v | %v | %v | %v ]", o.guide.Name, o.name, o.index, o.path)
 }
 
 func (o *Luaunit) GetTina() *qtiny.Tina {
