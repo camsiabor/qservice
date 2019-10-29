@@ -6,14 +6,23 @@ import (
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/util"
+	"github.com/camsiabor/qservice/impl/tiny/luatiny"
 	"github.com/camsiabor/qservice/qtiny"
 	"time"
 	"unsafe"
 )
 
-var m = map[string]*qtiny.Message{}
+var tina *qtiny.Tina
+var context *luatiny.Luaunit
 
-func RegisterLuaMessageFunc(registry map[string]interface{}) {
+func RegisterLuaMessageFunc(luaunit *luatiny.Luaunit, registry map[string]interface{}) {
+
+	if luaunit == nil {
+		panic("no context luaunit")
+	}
+
+	context = luaunit
+	tina = context.GetTina()
 
 	// const
 	registry["MessageTypeSend"] = qtiny.MessageTypeSend
@@ -26,8 +35,8 @@ func RegisterLuaMessageFunc(registry map[string]interface{}) {
 	registry["MessageFlagRemoteOnly"] = qtiny.MessageFlagRemoteOnly
 
 	// method
-	registry["New"] = msgNew
-	registry["NewSimple"] = msgNewSimple
+
+	registry["Post"] = msgPost
 
 	registry["Easy"] = msgEasy
 
@@ -72,113 +81,80 @@ func msgInstance(L *lua.State) *qtiny.Message {
 	return message
 }
 
-func msgNewSimple(L *lua.State) int {
+func msgNew(L *lua.State, tableIndex int) (*qtiny.Message, error) {
+
+	if !L.IsTable(tableIndex) {
+		return nil, fmt.Errorf("parameter %v is not a table. current type = %v", tableIndex, L.Typename(tableIndex))
+	}
+
 	var message = &qtiny.Message{}
-	var ptrint = uintptr(unsafe.Pointer(message))
-	m["test"] = message
-	L.PushInteger(int64(ptrint))
-	return 1
-}
-
-func msgNew(L *lua.State) int {
-
-	var errstr string
-	var message *qtiny.Message
-	defer func() {
-		if len(errstr) == 0 {
-			var ptrint = uintptr(unsafe.Pointer(message))
-			L.PushInteger(int64(ptrint))
-			L.PushNil()
-		} else {
-			L.PushNil()
-			L.PushString(errstr)
-		}
-	}()
-
-	var top = L.GetTop()
-	if top == 0 {
-		return 2
-	}
-
-	if top == 1 {
-		if !L.IsTable(1) {
-			errstr = "parameter 1 is not a table. current type = " + L.Typename(1)
-			return 2
-		}
-	}
-
-	if L.IsNumber(1) {
-		// modify current message instance
-		if !L.IsTable(2) {
-			errstr = "parameter 2 is not a table. current type = " + L.Typename(2)
-			return 2
-		}
-		message = msgInstance(L)
-	} else {
-		// new message instance
-		message = &qtiny.Message{}
-		message.Type = qtiny.MessageTypeSend
-	}
+	message.Type = qtiny.MessageTypeSend
 
 	// message type
-	msgType, err := L.TableGetInteger(-1, "Type", int(uint32(qtiny.MessageTypeSend)), false)
+	msgType, err := L.TableGetInteger(tableIndex, "Type", int(uint32(qtiny.MessageTypeSend)), false)
 	if err != nil {
-		errstr = "invalid message type : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid message type : " + err.Error())
 	}
 	message.Type = qtiny.MessageType(msgType)
 
-	// address
-	address, err := L.TableGetString(-1, "Address", "", true)
+	// gatekey
+	gatekey, err := L.TableGetString(tableIndex, "Gatekey", "", false)
 	if err != nil {
-		errstr = "invalid address : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid Gatekey : " + err.Error())
+
+	}
+	message.Gatekey = gatekey
+
+	// address
+	address, err := L.TableGetString(tableIndex, "Address", "", true)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address : " + err.Error())
+
 	}
 	message.Address = address
 
 	// message data
-	data, err := L.TableGetValue(-1, "Data", nil, false)
+	data, err := L.TableGetValue(tableIndex, "Data", nil, false)
 	if err != nil {
-		errstr = "invalid address : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid address : " + err.Error())
+
 	}
 	message.Data = data
 
 	// receiver
-	receiver, err := L.TableGetString(-1, "Receiver", "", false)
+	receiver, err := L.TableGetString(tableIndex, "Receiver", "", false)
 	if err != nil {
-		errstr = "invalid receiver : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid receiver : " + err.Error())
+
 	}
 	message.Receiver = receiver
 
 	// share flag
-	shareFlag, err := L.TableGetInteger(-1, "ShareFlag", 0, false)
+	shareFlag, err := L.TableGetInteger(tableIndex, "ShareFlag", 0, false)
 	if err != nil {
-		errstr = "invalid share flag : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid share flag : " + err.Error())
+
 	}
 	message.ShareFlag = qtiny.MessageFlag(util.AsUInt32(shareFlag, 0))
 
 	// local flag
-	localFlag, err := L.TableGetInteger(-1, "LocalFlag", 0, false)
+	localFlag, err := L.TableGetInteger(tableIndex, "LocalFlag", 0, false)
 	if err != nil {
-		errstr = "invalid local flag : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid local flag : " + err.Error())
+
 	}
 	message.LocalFlag = qtiny.MessageFlag(util.AsUInt32(localFlag, 0))
 
 	// timeout
-	timeout, err := L.TableGetInteger(-1, "Timeout", 15000, false)
+	timeout, err := L.TableGetInteger(tableIndex, "Timeout", 15000, false)
 	if err != nil {
-		errstr = "invalid timeout : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid timeout : " + err.Error())
 	}
 	message.Timeout = time.Duration(timeout) * time.Millisecond
 
 	// reply handler
 	var hasHandler = false
-	handlerRef, err := L.TableGetAndRef(-1, "Handler", false, func(L *lua.State, tableIndex int, key string) error {
+	handlerRef, err := L.TableGetAndRef(tableIndex, "Handler", false, func(L *lua.State, tableIndex int, key string) error {
 		if L.IsNil(-1) {
 			return nil
 		}
@@ -202,21 +178,51 @@ func msgNew(L *lua.State) int {
 				})
 			}
 		} else {
-			errstr = "invalid handler : " + err.Error()
-			return 2
+			return nil, fmt.Errorf("invalid handler : " + err.Error())
 		}
 	}
 
 	// trace depth
-	traceDepth, err := L.TableGetInteger(-1, "TraceDepth", 1, false)
+	traceDepth, err := L.TableGetInteger(tableIndex, "TraceDepth", 1, false)
 	if err != nil {
-		errstr = "invalid trace depth : " + err.Error()
-		return 2
+		return nil, fmt.Errorf("invalid trace depth : " + err.Error())
+
 	}
 	message.TraceDepth = traceDepth
+	return message, nil
+}
+
+func msgPost(L *lua.State) int {
+
+	message, err := msgNew(L, 1)
+	if err != nil {
+		L.PushNil()
+		L.PushString(err.Error())
+		return 2
+	}
+
+	var microroller = tina.GetMicroroller()
+	if microroller == nil {
+		panic("microroller is null in tina : " + tina.GetNodeId())
+	}
+
+	response, err := microroller.Post(message.Gatekey, message)
+	if response == nil {
+		L.PushNil()
+	} else {
+		var responseInt = uintptr(unsafe.Pointer(response))
+		L.PushInteger(int64(responseInt))
+	}
+	if err == nil {
+		L.PushNil()
+	} else {
+		L.PushString(err.Error())
+	}
 
 	return 2
 }
+
+/* ========================= info ============================ */
 
 func msgAddress(L *lua.State) int {
 	var message = msgInstance(L)

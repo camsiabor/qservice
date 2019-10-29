@@ -119,3 +119,7 @@ func (o *Luaunit) stop(lock bool) {
 func (o *Luaunit) string() string {
 	return fmt.Sprintf("[ %v | %v | %v ]", o.guide.Name, o.name, o.path)
 }
+
+func (o *Luaunit) GetTina() *qtiny.Tina {
+	return o.tina
+}
