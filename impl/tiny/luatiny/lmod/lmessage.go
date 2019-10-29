@@ -6,23 +6,24 @@ import (
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/util"
-	"github.com/camsiabor/qservice/impl/tiny/luatiny"
 	"github.com/camsiabor/qservice/qtiny"
 	"time"
 	"unsafe"
 )
 
-var tina *qtiny.Tina
-var context *luatiny.Luaunit
+type LuaMessageModule struct {
+	tina        *qtiny.Tina
+	microroller *qtiny.Microroller
+}
 
-func RegisterLuaMessageFunc(luaunit *luatiny.Luaunit, registry map[string]interface{}) {
+func (o *LuaMessageModule) RegisterLuaMessageFunc(tina *qtiny.Tina, registry map[string]interface{}) {
 
-	if luaunit == nil {
-		panic("no context luaunit")
+	if tina == nil {
+		panic("no context tina")
 	}
 
-	context = luaunit
-	tina = context.GetTina()
+	o.tina = tina
+	o.microroller = o.tina.GetMicroroller()
 
 	// const
 	registry["MessageTypeSend"] = qtiny.MessageTypeSend
@@ -36,7 +37,7 @@ func RegisterLuaMessageFunc(luaunit *luatiny.Luaunit, registry map[string]interf
 
 	// method
 
-	registry["Post"] = msgPost
+	registry["Post"] = o.msgPost
 
 	registry["Easy"] = msgEasy
 
@@ -192,7 +193,7 @@ func msgNew(L *lua.State, tableIndex int) (*qtiny.Message, error) {
 	return message, nil
 }
 
-func msgPost(L *lua.State) int {
+func (o *LuaMessageModule) msgPost(L *lua.State) int {
 
 	message, err := msgNew(L, 1)
 	if err != nil {
@@ -201,12 +202,7 @@ func msgPost(L *lua.State) int {
 		return 2
 	}
 
-	var microroller = tina.GetMicroroller()
-	if microroller == nil {
-		panic("microroller is null in tina : " + tina.GetNodeId())
-	}
-
-	response, err := microroller.Post(message.Gatekey, message)
+	response, err := o.microroller.Post(message.Gatekey, message)
 	if response == nil {
 		L.PushNil()
 	} else {

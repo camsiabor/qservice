@@ -38,7 +38,8 @@ func (o *Luaunit) init(restart bool) (err error) {
 	}
 
 	var msgRegistry = map[string]interface{}{}
-	lmod.RegisterLuaMessageFunc(o, msgRegistry)
+	var msgModule = &lmod.LuaMessageModule{}
+	msgModule.RegisterLuaMessageFunc(o.tina, msgRegistry)
 	if err = o.L.TableRegisters("qmsg", msgRegistry); err != nil {
 		return err
 	}
@@ -80,6 +81,7 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 		return 1
 	}
 
+	// TODO multi thread concurrency Lua State program? (need check)
 	var nano = &qtiny.Nano{
 		Id:      uuid.NewV4().String(),
 		Address: address,
