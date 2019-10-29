@@ -155,7 +155,7 @@ func (o *Microroller) dispatchMessage(msg *Message, linger *gatewayLinger) {
 			o.logger.Printf("[microroller] dispatch %v", msg.String())
 		}
 		msg.microroller = o
-		nano.Handle(msg)
+		nano.Dispatch(msg)
 	}
 }
 
@@ -209,10 +209,12 @@ func (o *Microroller) NanoLocalRegister(nano *Nano) error {
 		defer o.nanoMutex.Unlock()
 		var group = o.nanos[nano.Address]
 		if group == nil {
-			o.nanos[nano.Address] = nano
-		} else {
-			group.LocalAdd(nano)
+			group = nano
+			defer func() {
+				o.nanos[nano.Address] = nano
+			}()
 		}
+		group.LocalAdd(nano)
 	}()
 
 	return o.discovery.NanoLocalRegister(nano)
@@ -224,18 +226,19 @@ func (o *Microroller) NanoLocalUnregister(nano *Nano) error {
 	var err = func() error {
 		o.nanoMutex.Lock()
 		defer o.nanoMutex.Unlock()
-
 		var group = o.nanos[nano.Address]
 		if group == nil {
 			return nil
 		}
-		var err = group.LocalRemove(nano.Id)
-		if err != nil {
-			return err
+		if nano.Id == group.Id {
+			if group.localNext == nil {
+				delete(o.nanos, nano.Address)
+			} else {
+				o.nanos[nano.Address] = group.localNext
+			}
 		}
-		var locals = group.LocalAll()
-		if locals == nil || len(locals) == 0 {
-			delete(o.nanos, nano.Address)
+		if err := group.LocalRemove(nano.Id); err != nil {
+			return err
 		}
 		return nil
 	}()

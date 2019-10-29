@@ -1,9 +1,9 @@
 package qtiny
 
 import (
+	"fmt"
 	"github.com/camsiabor/qcom/util"
 	"github.com/twinj/uuid"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 )
@@ -31,8 +31,8 @@ type Nano struct {
 
 	Flag NanoFlag
 
-	locals     []*Nano
-	localAlpha *Nano
+	localPrev  *Nano
+	localNext  *Nano
 	localMutex sync.RWMutex
 
 	portalMutex   sync.RWMutex
@@ -40,6 +40,9 @@ type Nano struct {
 	portalCount   int
 	portalArray   []string
 	portals       map[string]interface{}
+
+	shareQueue chan *Message
+	selfQueue  chan *Message
 
 	callbacks []NanoCallback
 }
@@ -70,76 +73,130 @@ func CloneNano(nano *Nano) *Nano {
 
 /* ====================================== handling ==================================== */
 
-func (o *Nano) Handle(message *Message) {
+func (o *Nano) Dispatch(message *Message) {
+
+	// broadcast message
 	if message.Type&MessageTypeBroadcast > 0 {
-		for i := 0; i < len(o.locals); i++ {
-			o.locals[i].Handler(message)
+		if o.localNext != nil {
+			var current = o
+			for current != nil {
+				current.selfQueue <- message
+				current = current.localNext
+			}
 		}
 		return
 	}
-	var sibling = o.LocalGet(-1)
-	sibling.Handler(message)
+
+	// one message
+	o.shareQueue <- message
+}
+
+func (o *Nano) handleLoop() {
+	var ok = true
+	var message *Message
+	for ok {
+		select {
+		case message, ok = <-o.shareQueue:
+			o.handle(message)
+		case message, ok = <-o.selfQueue:
+			o.handle(message)
+		}
+	}
+}
+
+func (o *Nano) handle(message *Message) {
+	if message == nil {
+		return
+	}
+	defer func() {
+		var pan = recover()
+		if pan != nil {
+			var err = util.AsError(pan)
+			_ = message.Error(500, fmt.Sprintf("%v | error | %v | ", o.Address, err))
+		}
+	}()
+	o.Handler(message)
 }
 
 /* ====================================== siblings ==================================== */
 
 func (o *Nano) LocalAdd(silbing *Nano) {
+
+	if silbing.Handler == nil {
+		panic("sibling no handler")
+	}
+
 	o.localMutex.Lock()
 	defer o.localMutex.Unlock()
-	if o.locals == nil {
-		o.locals = []*Nano{o, silbing}
-	} else {
-		o.locals = append(o.locals, silbing)
+
+	if o == silbing {
+		if o.shareQueue == nil {
+			o.shareQueue = make(chan *Message, 1024)
+		}
 	}
-	silbing.localAlpha = o
+
+	if silbing.selfQueue == nil {
+		silbing.selfQueue = make(chan *Message, 128)
+	}
+
+	if o != silbing {
+		silbing.localNext = o.localNext
+		silbing.localPrev = o
+		silbing.shareQueue = o.shareQueue
+
+		o.localNext = silbing
+	}
+
+	go o.handleLoop()
 }
 
 func (o *Nano) LocalRemove(id string) error {
-	if o.locals == nil {
-		return nil
-	}
+
 	o.localMutex.Lock()
 	defer o.localMutex.Unlock()
-	var index = -1
-	for i := range o.locals {
-		if o.locals[i].Id == id {
-			index = i
+
+	if o.Id == id {
+		if o.selfQueue != nil {
+			close(o.selfQueue)
+		}
+		if o.localNext == nil {
+			if o.shareQueue != nil {
+				close(o.shareQueue)
+			}
 		}
 	}
 
-	if index < 0 {
-		return nil
-	}
-
-	if len(o.locals) == 1 {
-		o.locals = nil
-		return nil
-	}
-
-	var c = 0
-	var localsNew = make([]*Nano, len(o.locals)-1)
-	for i := range o.locals {
-		if i != index {
-			localsNew[c] = o.locals[i]
-			c++
+	var current = o.localNext
+	for current != nil {
+		if current.Id == id {
+			if current.localPrev != nil {
+				current.localPrev.localNext = current.localNext
+			}
+			if current.selfQueue != nil {
+				close(current.selfQueue)
+			}
 		}
+		current = current.localNext
 	}
-	o.locals = localsNew
 	return nil
 }
 
-func (o *Nano) LocalGet(index int) *Nano {
-	if o.locals == nil {
-		return o
+func (o *Nano) LocalIterate(routine func(*Nano) (bool, error)) error {
+	var current = o.localNext
+	for current != nil {
+		var run, err = routine(current)
+		if !run {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		current = current.localNext
+		if current == o {
+			return nil
+		}
 	}
-	if index < 0 {
-		index = rand.Intn(len(o.locals))
-	}
-	return o.locals[index]
-}
-
-func (o *Nano) LocalAll() []*Nano {
-	return o.locals
+	return nil
 }
 
 /* ====================================== remote consumers ==================================== */
