@@ -37,14 +37,16 @@ func (o *Luaunit) init(restart bool) (err error) {
 		return err
 	}
 
-	var msgRegistry = map[string]interface{}{}
 	var msgModule = &lmod.LuaMessageModule{}
-	msgModule.RegisterLuaMessageFunc(o.tina, msgRegistry)
-	if err = o.L.TableRegisters("qmsg", msgRegistry); err != nil {
+	if err = msgModule.RegisterLuaMessageFunc(o.L, o.tina); err != nil {
 		return err
 	}
 
-	return err
+	if err = lmod.RegisterLuaOSFunc(o.L); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 /* ===================== life cycle ==================== */

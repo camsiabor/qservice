@@ -16,7 +16,7 @@ type LuaMessageModule struct {
 	microroller *qtiny.Microroller
 }
 
-func (o *LuaMessageModule) RegisterLuaMessageFunc(tina *qtiny.Tina, registry map[string]interface{}) {
+func (o *LuaMessageModule) RegisterLuaMessageFunc(L *lua.State, tina *qtiny.Tina) error {
 
 	if tina == nil {
 		panic("no context tina")
@@ -24,6 +24,8 @@ func (o *LuaMessageModule) RegisterLuaMessageFunc(tina *qtiny.Tina, registry map
 
 	o.tina = tina
 	o.microroller = o.tina.GetMicroroller()
+
+	var registry = map[string]interface{}{}
 
 	// const
 	registry["MessageTypeSend"] = qtiny.MessageTypeSend
@@ -67,6 +69,8 @@ func (o *LuaMessageModule) RegisterLuaMessageFunc(tina *qtiny.Tina, registry map
 	registry["ReplyData"] = msgReplyData
 
 	registry["TraceDepth"] = msgTraceDepth
+
+	return L.TableRegisters("qmsg", registry)
 
 }
 
