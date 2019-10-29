@@ -153,7 +153,9 @@ func (o *LuaTinyGuide) onConfigChange(event *fsnotify.Event, path string, watch 
 	}
 
 	for name, change := range changes {
-		var unit = o.luaunitGet(name, true)
+		var config = util.AsMap(change, false)
+		var instance = util.GetInt(config, 1, "instance")
+		var unit = o.luaunitGet(name, instance)
 		unit.config = util.AsMap(change, false)
 		var active = util.GetBool(change, true, "active")
 		var main = util.GetStr(change, "", "main")

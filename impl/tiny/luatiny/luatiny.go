@@ -103,15 +103,18 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 
 	var bytes []byte
 	if bytes, err = ioutil.ReadFile(o.ConfigPath); err != nil {
+		o.Logger.Printf("readfile error %v", err)
 		return
 	}
 
 	if err = json.Unmarshal(bytes, &o.Config); err != nil {
+		o.Logger.Printf("json unmarshal error %v", err)
 		return
 	}
 
 	var meta = util.GetMap(config, true, "meta")
 	if err = o.parseMeta(meta); err != nil {
+		o.Logger.Printf("parse meta error %v", err)
 		return
 	}
 
@@ -120,7 +123,8 @@ func (o *LuaTinyGuide) start(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gu
 			continue
 		}
 		var config = util.AsMap(v, true)
-		var unit = o.luaunitGet(unitname, true)
+		var instance = util.GetInt(config, 1, "instance")
+		var unit = o.luaunitGet(unitname, instance)
 		unit.config = config
 		if err := unit.start(true); err != nil {
 			o.Logger.Println(unit.string(), "start fail", err.Error())
@@ -154,7 +158,7 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 
 }
 
-func (o *LuaTinyGuide) luaunitGet(name string, create bool) *Luaunit {
+func (o *LuaTinyGuide) luaunitGet(name string, createInstance int) *Luaunit {
 
 	if o.units == nil {
 		func() {
@@ -177,7 +181,7 @@ func (o *LuaTinyGuide) luaunitGet(name string, create bool) *Luaunit {
 		return one
 	}
 
-	if !create {
+	if createInstance <= 0 {
 		return nil
 	}
 

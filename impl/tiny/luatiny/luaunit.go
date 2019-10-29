@@ -29,6 +29,8 @@ type Luaunit struct {
 
 	mutex sync.RWMutex
 
+	next *Luaunit
+
 	nanoMutex sync.RWMutex
 	nanos     map[string]*qtiny.Nano
 }
