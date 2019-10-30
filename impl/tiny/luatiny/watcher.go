@@ -42,7 +42,7 @@ func (o *LuaTinyGuide) watcherStart() {
 		o.unitMutex.RLock()
 		defer o.unitMutex.RUnlock()
 		for _, v := range o.units {
-			if v.L == nil {
+			if v.Ls == nil {
 				continue
 			}
 			var watch = &fswatcher.FsWatch{
@@ -189,7 +189,7 @@ func (o *LuaTinyGuide) onScriptChange(event *fsnotify.Event, path string, watch 
 
 	for _, unit := range o.units {
 		if unit.path == path {
-			if unit.L != nil {
+			if unit.Ls != nil {
 				var err = unit.start(true)
 				if err != nil {
 					o.Logger.Println(unit.string(), "start fail", err.Error())

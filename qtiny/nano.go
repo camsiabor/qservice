@@ -92,6 +92,7 @@ func (o *Nano) Dispatch(message *Message) {
 }
 
 func (o *Nano) handleLoop() {
+
 	var ok = true
 	var message *Message
 	for ok {
@@ -115,7 +116,9 @@ func (o *Nano) handle(message *Message) {
 			_ = message.Error(500, fmt.Sprintf("%v | error | %v | ", o.Address, err))
 		}
 	}()
+	// log.Printf("[%v] start %v", o.Id, qtime.YYYY_MM_dd_HH_mm_ss(nil))
 	o.Handler(message)
+	// log.Printf("[%v] end %v", o.Id, qtime.YYYY_MM_dd_HH_mm_ss(nil))
 }
 
 /* ====================================== siblings ==================================== */
@@ -147,7 +150,7 @@ func (o *Nano) LocalAdd(silbing *Nano) {
 		o.localNext = silbing
 	}
 
-	go o.handleLoop()
+	go silbing.handleLoop()
 }
 
 func (o *Nano) LocalRemove(id string) error {

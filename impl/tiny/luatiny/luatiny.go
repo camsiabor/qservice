@@ -150,9 +150,7 @@ func (o *LuaTinyGuide) stop(event qtiny.TinyGuideEvent, tiny qtiny.TinyKind, gui
 	defer o.unitMutex.Unlock()
 
 	for _, v := range o.units {
-		if v.L != nil {
-			v.L.Close()
-		}
+		v.stop(true)
 	}
 
 }
@@ -186,26 +184,9 @@ func (o *LuaTinyGuide) luaunitGet(name string, config map[string]interface{}, cr
 
 	one = &Luaunit{}
 	one.guide = o
-	one.index = 1
 	one.name = name
 	one.config = config
 	one.logger = o.Logger
-
-	if createInstance > 1 {
-		var current = one
-		for i := 2; i <= createInstance; i++ {
-			var sibling = &Luaunit{}
-			sibling.guide = o
-			sibling.index = i
-			sibling.name = name
-			sibling.config = config
-			sibling.logger = o.Logger
-
-			current.next = sibling
-
-			current = sibling
-		}
-	}
 
 	func() {
 		o.unitMutex.Lock()

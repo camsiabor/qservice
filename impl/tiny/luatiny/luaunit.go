@@ -12,13 +12,12 @@ import (
 )
 
 type Luaunit struct {
-	L *lua.State
+	Ls       []*lua.State
+	instance int
 
 	guide *LuaTinyGuide
 
 	tina *qtiny.Tina
-
-	index int
 
 	err  error
 	name string
@@ -31,24 +30,11 @@ type Luaunit struct {
 
 	mutex sync.RWMutex
 
-	next *Luaunit
-
 	nanoMutex sync.RWMutex
 	nanos     map[string]*qtiny.Nano
 }
 
 func (o *Luaunit) start(restart bool) (err error) {
-	var current = o
-	for current != nil {
-		if err = current.startSelf(restart); err != nil {
-			return err
-		}
-		current = current.next
-	}
-	return nil
-}
-
-func (o *Luaunit) startSelf(restart bool) (err error) {
 
 	defer func() {
 		var pan = recover()
@@ -63,17 +49,16 @@ func (o *Luaunit) startSelf(restart bool) (err error) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	if o.L != nil {
+	if o.Ls != nil {
 		o.stop(false)
 	}
 
 	if !util.GetBool(o.config, true, "active") {
 		return nil
 	}
-
-	err = o.init(restart)
-	if err != nil {
-		return err
+	o.instance = util.GetInt(o.config, 1, "instance")
+	if o.instance <= 0 {
+		return nil
 	}
 
 	if len(o.main) == 0 {
@@ -89,26 +74,16 @@ func (o *Luaunit) startSelf(restart bool) (err error) {
 		return err
 	}
 
-	_, err = RunLuaFile(o.L, o.main, func(L *lua.State, pan interface{}) {
-		err = util.AsError(pan)
-	})
+	o.err = o.init(restart)
 
-	o.err = err
+	if o.err == nil {
+		o.logger.Println(o.string(), "start")
+	}
 
-	o.logger.Println(o.string(), "start")
-
-	return err
+	return o.err
 }
 
 func (o *Luaunit) stop(lock bool) {
-	var current = o
-	for current != nil {
-		current.stopSelf(lock)
-		current = current.next
-	}
-}
-
-func (o *Luaunit) stopSelf(lock bool) {
 
 	if lock {
 		o.mutex.Lock()
@@ -131,16 +106,22 @@ func (o *Luaunit) stopSelf(lock bool) {
 		}()
 	}
 
-	if o.L != nil {
-		o.L.Close()
-		o.L = nil
+	if o.Ls != nil {
+		for i := 0; i < len(o.Ls); i++ {
+			if o.Ls[i] != nil {
+				o.Ls[i].Close()
+				o.Ls[i] = nil
+			}
+		}
+		o.Ls = nil
+		o.instance = 0
 	}
 
 	o.logger.Println(o.string(), "stop")
 }
 
 func (o *Luaunit) string() string {
-	return fmt.Sprintf("[ %v | %v | %v | %v ]", o.guide.Name, o.name, o.index, o.path)
+	return fmt.Sprintf("[ %v | %v | [%v] | %v ]", o.guide.Name, o.name, o.instance, o.path)
 }
 
 func (o *Luaunit) GetTina() *qtiny.Tina {

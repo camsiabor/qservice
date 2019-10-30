@@ -13,24 +13,38 @@ import (
 
 func (o *Luaunit) init(restart bool) (err error) {
 
-	if !restart && o.L != nil {
+	if !restart && o.Ls != nil {
 		return nil
 	}
 
+	o.Ls = make([]*lua.State, o.instance)
+	for i := 0; i < o.instance; i++ {
+		var err = o.initOne(i, restart)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Luaunit) initOne(index int, restart bool) (err error) {
+
 	o.tina = o.guide.tiny.GetTina()
 
-	o.L, err = InitLuaState(o.guide.LuaPath, o.guide.LuaCPath)
+	L, err := InitLuaState(o.guide.LuaPath, o.guide.LuaCPath)
 	if err != nil {
 		return
 	}
+	L.SetData("index", index)
 
-	luar.Register(o.L, "", map[string]interface{}{
+	o.Ls[index] = L
+
+	luar.Register(L, "", map[string]interface{}{
 		"tina": o.guide.tiny.GetTina(),
 	})
 
-	luar.Register(o.L, "luaunit", map[string]interface{}{
+	luar.Register(L, "luaunit", map[string]interface{}{
 		"name":   o.name,
-		"index":  o.index,
 		"config": o.config,
 		"path":   o.path,
 	})
@@ -40,16 +54,24 @@ func (o *Luaunit) init(restart bool) (err error) {
 	tinaRegistry["AddCloseHandler"] = lua.AddCloseHandlerDefault
 	tinaRegistry["NanoLocalRegister"] = o.nanoLocalRegister
 
-	if err = o.L.TableRegisters("qtiny", tinaRegistry); err != nil {
+	if err = L.TableRegisters("qtiny", tinaRegistry); err != nil {
 		return err
 	}
 
 	var msgModule = &lmod.LuaMessageModule{}
-	if err = msgModule.RegisterLuaMessageFunc(o.L, o.tina); err != nil {
+	if err = msgModule.RegisterLuaMessageFunc(L, o.tina); err != nil {
 		return err
 	}
 
-	if err = lmod.RegisterLuaOSFunc(o.L); err != nil {
+	if err = lmod.RegisterLuaOSFunc(L); err != nil {
+		return err
+	}
+
+	_, err = RunLuaFile(L, o.main, func(L *lua.State, pan interface{}) {
+		err = util.AsError(pan)
+	})
+
+	if err != nil {
 		return err
 	}
 
@@ -65,6 +87,11 @@ func (o *Luaunit) addTimer(L *lua.State) int {
 /* ===================== service ==================== */
 
 func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
+
+	if L != o.Ls[0] {
+		L.PushNil()
+		return 1
+	}
 
 	if !L.IsTable(1) {
 		L.PushString("invalid argument! need a table")

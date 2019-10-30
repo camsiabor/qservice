@@ -78,7 +78,7 @@ func (o *LuaMessageModule) RegisterLuaMessageFunc(L *lua.State, tina *qtiny.Tina
 
 func msgInstance(L *lua.State) *qtiny.Message {
 	if !L.IsNumber(1) {
-		panic("is not reference registry of message")
+		panic("is not a reference in registry of message (not a number). lua unit index : " + util.AsStr(L.GetData("luaunit_index"), ""))
 	}
 	var ptrvalue = L.ToInteger(1)
 	var ptr = unsafe.Pointer(uintptr(ptrvalue))
