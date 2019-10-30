@@ -212,6 +212,7 @@ func (o *LuaMessageModule) msgPost(L *lua.State) int {
 	} else {
 		var responseInt = uintptr(unsafe.Pointer(response))
 		L.PushInteger(int64(responseInt))
+		L.KeepGoRef(response)
 	}
 	if err == nil {
 		L.PushNil()

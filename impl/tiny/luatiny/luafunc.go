@@ -140,6 +140,7 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 			go func() {
 
 				defer func() {
+					L.ClearGoRef()
 					o.instQueue <- L
 				}()
 
