@@ -12,8 +12,9 @@ import (
 )
 
 type Luaunit struct {
-	Ls       []*lua.State
-	instance int
+	Ls        []*lua.State
+	instance  int
+	instQueue chan *lua.State
 
 	guide *LuaTinyGuide
 
@@ -115,6 +116,11 @@ func (o *Luaunit) stop(lock bool) {
 		}
 		o.Ls = nil
 		o.instance = 0
+	}
+
+	if o.instQueue != nil {
+		close(o.instQueue)
+		o.instQueue = nil
 	}
 
 	o.logger.Println(o.string(), "stop")

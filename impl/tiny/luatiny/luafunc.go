@@ -18,12 +18,16 @@ func (o *Luaunit) init(restart bool) (err error) {
 	}
 
 	o.Ls = make([]*lua.State, o.instance)
+	o.instQueue = make(chan *lua.State, o.instance)
+
 	for i := 0; i < o.instance; i++ {
 		var err = o.initOne(i, restart)
 		if err != nil {
 			return err
 		}
+		o.instQueue <- o.Ls[i]
 	}
+
 	return nil
 }
 
@@ -88,11 +92,6 @@ func (o *Luaunit) addTimer(L *lua.State) int {
 
 func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 
-	if L != o.Ls[0] {
-		L.PushNil()
-		return 1
-	}
-
 	if !L.IsTable(1) {
 		L.PushString("invalid argument! need a table")
 		return 1
@@ -112,6 +111,13 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 		return nil
 	})
 
+	L.SetData(address, handlerRef)
+
+	if L != o.Ls[0] {
+		L.PushNil()
+		return 1
+	}
+
 	if err != nil {
 		L.PushString("invalid handler : " + err.Error())
 		return 1
@@ -124,15 +130,33 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 		Flag:    qtiny.NanoFlag(flag),
 		Options: nil, // TODO options
 		Handler: func(message *qtiny.Message) {
-			var ptrint = uintptr(unsafe.Pointer(message))
-			L.RawGeti(lua.LUA_REGISTRYINDEX, handlerRef)
-			L.PushInteger(int64(ptrint))
-			_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
-				var err = util.AsError(pan)
-				if err != nil {
-					_ = message.Error(0, err.Error())
-				}
-			})
+
+			var L, _ = <-o.instQueue
+			if L == nil {
+				_ = message.Error(500, "service close")
+				return
+			}
+
+			go func() {
+
+				defer func() {
+					o.instQueue <- L
+				}()
+
+				var ptrint = uintptr(unsafe.Pointer(message))
+				var handlerRef = L.GetData(address).(int)
+				L.RawGeti(lua.LUA_REGISTRYINDEX, handlerRef)
+				L.PushInteger(int64(ptrint))
+
+				_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
+					var err = util.AsError(pan)
+					if err != nil {
+						_ = message.Error(0, err.Error())
+					}
+				})
+
+			}()
+
 		},
 	}
 
