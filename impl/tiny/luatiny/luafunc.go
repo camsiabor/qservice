@@ -144,9 +144,10 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 					o.instQueue <- L
 				}()
 
-				var ptrint = uintptr(unsafe.Pointer(message))
 				var handlerRef = L.GetData(address).(int)
 				L.RawGeti(lua.LUA_REGISTRYINDEX, handlerRef)
+
+				var ptrint = uintptr(unsafe.Pointer(message))
 				L.PushInteger(int64(ptrint))
 
 				_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
