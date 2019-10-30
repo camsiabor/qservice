@@ -133,31 +133,11 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 
 			var L, _ = <-o.instQueue
 			if L == nil {
-				_ = message.Error(500, "service close")
+				_ = message.Error(500, "service close | "+address)
 				return
 			}
 
-			go func() {
-
-				defer func() {
-					L.ClearGoRef()
-					o.instQueue <- L
-				}()
-
-				var handlerRef = L.GetData(address).(int)
-				L.RawGeti(lua.LUA_REGISTRYINDEX, handlerRef)
-
-				var ptrint = uintptr(unsafe.Pointer(message))
-				L.PushInteger(int64(ptrint))
-
-				_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
-					var err = util.AsError(pan)
-					if err != nil {
-						_ = message.Error(0, err.Error())
-					}
-				})
-
-			}()
+			go o.nanoHandler(L, address, message)
 
 		},
 	}
@@ -189,5 +169,27 @@ func (o *Luaunit) nanoLocalRegister(L *lua.State) int {
 	}
 
 	return 1
+
+}
+
+func (o *Luaunit) nanoHandler(L *lua.State, address string, message *qtiny.Message) {
+
+	defer func() {
+		L.ClearGoRef()
+		o.instQueue <- L
+	}()
+
+	var handlerRef = L.GetData(address).(int)
+	L.RawGeti(lua.LUA_REGISTRYINDEX, handlerRef)
+
+	var ptrint = uintptr(unsafe.Pointer(message))
+	L.PushInteger(int64(ptrint))
+
+	_ = L.CallHandle(1, 0, func(L *lua.State, pan interface{}) {
+		var err = util.AsError(pan)
+		if err != nil {
+			_ = message.Error(0, err.Error())
+		}
+	})
 
 }
