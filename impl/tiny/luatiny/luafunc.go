@@ -1,6 +1,7 @@
 package luatiny
 
 import (
+	"fmt"
 	"github.com/camsiabor/golua/lua"
 	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/qerr"
@@ -44,6 +45,9 @@ func (o *Luaunit) initOne(index int, restart bool) (err error) {
 	o.Ls[index] = L
 
 	luar.Register(L, "", map[string]interface{}{
+		"pcall": o.pcall,
+		"panic": o.panic,
+
 		"tina": o.guide.tiny.GetTina(),
 	})
 
@@ -192,4 +196,42 @@ func (o *Luaunit) nanoHandler(L *lua.State, address string, message *qtiny.Messa
 		}
 	})
 
+}
+
+func (o *Luaunit) panic(L *lua.State) int {
+	//var str = L.ToString(1)
+	var z = 0
+	var a = 1 / z
+	fmt.Print(a)
+	return 0
+}
+
+func (o *Luaunit) pcall(L *lua.State) int {
+	var top = L.GetTop()
+	if top == 0 {
+		L.PushString("paramter 1 need to be a function")
+		return 1
+	}
+	if !L.IsFunction(1) {
+		L.PushString("paramter 1 is not a function. current type = " + L.Typename(1))
+		return 1
+	}
+	var luaerr error
+	var callerr = L.CallHandle(top-1, lua.LUA_MULTRET, func(L *lua.State, pan interface{}) {
+		if pan != nil {
+			luaerr = util.AsError(pan)
+		}
+	})
+	if callerr != nil {
+		L.PushString(callerr.Error())
+		return 1
+	}
+	if luaerr != nil {
+		L.PushString(luaerr.Error())
+		return 1
+	}
+	L.PushString("true")
+	L.Insert(1)
+	top = L.GetTop()
+	return top
 }
