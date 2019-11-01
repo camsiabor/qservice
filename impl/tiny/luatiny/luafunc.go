@@ -45,7 +45,7 @@ func (o *Luaunit) initOne(index int, restart bool) (err error) {
 	o.Ls[index] = L
 
 	luar.Register(L, "", map[string]interface{}{
-		"pcall": o.pcall,
+		//"pcall": o.pcall,
 		"panic": o.panic,
 
 		"tina": o.guide.tiny.GetTina(),
@@ -206,6 +206,7 @@ func (o *Luaunit) panic(L *lua.State) int {
 	return 0
 }
 
+/*
 func (o *Luaunit) pcall(L *lua.State) int {
 	var top = L.GetTop()
 	if top == 0 {
@@ -232,3 +233,4 @@ func (o *Luaunit) pcall(L *lua.State) int {
 	top = L.GetTop()
 	return top
 }
+*/
