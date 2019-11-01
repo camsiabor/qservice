@@ -216,24 +216,17 @@ func (o *Luaunit) pcall(L *lua.State) int {
 		L.PushString("paramter 1 is not a function. current type = " + L.Typename(1))
 		return 1
 	}
-	var luaerr error
-	var callerr = L.CallHandle(top-1, lua.LUA_MULTRET, func(L *lua.State, pan interface{}) {
-		if pan != nil {
-			var e, ok = pan.(*lua.LuaError)
-			if ok {
-				pan = e.StackTraceToString("\t", "")
-			}
-			luaerr = util.AsError(pan)
-		}
-	})
+
+	var callerr = L.Call(top-1, lua.LUA_MULTRET)
 	if callerr != nil {
-		L.PushString(callerr.Error())
-		return 1
+		callerr = lua.LuaErrorTrans(callerr, "\t", "")
+		if callerr != nil {
+			L.PushString(callerr.Error())
+			return 1
+		}
+		return 0
 	}
-	if luaerr != nil {
-		L.PushString(luaerr.Error())
-		return 1
-	}
+
 	L.PushString("true")
 	L.Insert(1)
 	top = L.GetTop()
