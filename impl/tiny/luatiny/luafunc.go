@@ -219,6 +219,10 @@ func (o *Luaunit) pcall(L *lua.State) int {
 	var luaerr error
 	var callerr = L.CallHandle(top-1, lua.LUA_MULTRET, func(L *lua.State, pan interface{}) {
 		if pan != nil {
+			var e, ok = pan.(*lua.LuaError)
+			if ok {
+				pan = e.StackTraceToString("\t", "")
+			}
 			luaerr = util.AsError(pan)
 		}
 	})
