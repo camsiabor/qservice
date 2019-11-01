@@ -44,7 +44,7 @@ func (o *Luaunit) initOne(index int, restart bool) (err error) {
 
 	o.Ls[index] = L
 
-	luar.Register(L, "", map[string]interface{}{
+	luar.Register(L, "qam", map[string]interface{}{
 		//"pcall": o.pcall,
 		"panic": o.panic,
 
