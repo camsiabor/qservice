@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/camsiabor/golua/lua"
-	"github.com/camsiabor/golua/luar"
 	"github.com/camsiabor/qcom/util"
 	"github.com/camsiabor/qservice/qtiny"
 	"time"
@@ -474,11 +473,11 @@ func msgError(L *lua.State) int {
 /* =========== convenient ============== */
 
 func msgEasy(L *lua.State) int {
-	var message = msgInstance(L)
 
-	luar.Register(L, "", map[string]interface{}{
-		"theM": message,
-	})
+	//var message = msgInstance(L)
+	//luar.Register(L, "", map[string]interface{}{
+	//	"theM": message,
+	//})
 
 	// TODO
 	// L.GetGlobal("theM")
